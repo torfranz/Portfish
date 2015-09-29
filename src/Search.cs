@@ -790,49 +790,47 @@ namespace Portfish
             ulong posKey = 0;
             int ttMove, move, excludedMove, bestMove, threatMove;
             int ext, newDepth;
-            Bound bt;
             int bestValue, value, oldAlpha, ttValue;
             int refinedValue, nullValue, futilityValue;
             bool pvMove, inCheck, singularExtensionNode, givesCheck;
             bool captureOrPromotion, dangerous, doFullDepthSearch;
             int moveCount = 0, playedMoveCount = 0;
-            var thisThread = pos.this_thread();
             SplitPoint sp = null;
 
+            // Step 1. Initialize node
+            var thisThread = pos.this_thread();
+            
             refinedValue = bestValue = value = -ValueC.VALUE_INFINITE;
             oldAlpha = alpha;
             inCheck = pos.in_check();
+            
+            if (SpNode)
+            {
+                sp = ss[ssPos].sp;
+                bestMove = sp.bestMove;
+                threatMove = sp.threatMove;
+                bestValue = sp.bestValue;
+                ttMove = excludedMove = MoveC.MOVE_NONE;
+                ttValue = ValueC.VALUE_NONE;
+
+                ////moveCount = sp.moveCount; // Lock must be held here
+
+                Debug.Assert(sp.bestValue > -ValueC.VALUE_INFINITE && sp.moveCount > 0);
+
+                goto split_point_start;
+            }
+
+            bestValue = -ValueC.VALUE_INFINITE;
+            ss[ssPos].currentMove = threatMove = ss[ssPos + 1].excludedMove = bestMove = MoveC.MOVE_NONE;
             ss[ssPos].ply = ss[ssPos - 1].ply + 1;
+            ss[ssPos + 1].skipNullMove = 0;
+            ss[ssPos + 1].reduction = DepthC.DEPTH_ZERO;
+            ss[ssPos + 2].killers0 = ss[ssPos + 2].killers1 = MoveC.MOVE_NONE;
 
             // Used to send selDepth info to GUI
             if (PvNode && thisThread.maxPly < ss[ssPos].ply)
             {
                 thisThread.maxPly = ss[ssPos].ply;
-            }
-
-            // Step 1. Initialize node
-            if (SpNode)
-            {
-                ttMove = excludedMove = MoveC.MOVE_NONE;
-                ttValue = ValueC.VALUE_NONE;
-
-                sp = ss[ssPos].sp;
-                bestMove = sp.bestMove;
-                threatMove = sp.threatMove;
-                bestValue = sp.bestValue;
-                moveCount = sp.moveCount; // Lock must be held here
-
-                Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && sp.moveCount > 0);
-
-                goto split_point_start;
-            }
-            else
-            {
-                bestValue = -ValueC.VALUE_INFINITE;
-                ss[ssPos].currentMove = threatMove = ss[ssPos + 1].excludedMove = bestMove = MoveC.MOVE_NONE;
-                ss[ssPos + 1].skipNullMove = 0;
-                ss[ssPos + 1].reduction = DepthC.DEPTH_ZERO;
-                ss[ssPos + 2].killers0 = ss[ssPos + 2].killers1 = MoveC.MOVE_NONE;
             }
             
             if (!RootNode)
@@ -1381,16 +1379,16 @@ namespace Portfish
 
                     if (PvNode && value > alpha && value < beta) // We want always alpha < beta
                     {
-                        alpha = value;
+                        alpha = bestValue; // Update alpha here!
                     }
 
                     if (SpNode && !thisThread.cutoff_occurred())
                     {
-                        sp.bestValue = value;
-                        sp.bestMove = move;
+                        sp.bestValue = bestValue;
+                        sp.bestMove = bestMove;
                         sp.alpha = alpha;
 
-                        if (value >= beta)
+                        if (bestValue >= beta)
                         {
                             sp.cutoff = true;
                         }
@@ -1424,7 +1422,8 @@ namespace Portfish
             // case of Signals.stop or thread.cutoff_occurred() are set, but this is
             // harmless because return value is discarded anyhow in the parent nodes.
             // If we are in a singular extension search then return a fail low score.
-            if (moveCount == 0)
+            // A split node has at least one move, the one tried before to be splitted.
+            if (!SpNode && moveCount == 0)
             {
                 if (st != null)
                 {
@@ -1434,22 +1433,22 @@ namespace Portfish
                 CheckInfoBroker.Free();
                 MovePickerBroker.Free(mp);
                 MovesSearchedBroker.Free();
-                return (excludedMove != 0) ? oldAlpha : inCheck ? Utils.mated_in(ss[ssPos].ply) : ValueC.VALUE_DRAW;
+                return (excludedMove != 0) ? alpha : inCheck ? Utils.mated_in(ss[ssPos].ply) : ValueC.VALUE_DRAW;
             }
 
             // If we have pruned all the moves without searching return a fail-low score
             if (bestValue == -ValueC.VALUE_INFINITE)
             {
                 Debug.Assert(playedMoveCount == 0);
-                bestValue = oldAlpha;
+                bestValue = alpha;
             }
 
             // Step 21. Update tables
             // Update transposition table entry, killers and history
             if (!SpNode && !SignalsStop && !thisThread.cutoff_occurred())
             {
-                move = bestValue <= oldAlpha ? MoveC.MOVE_NONE : bestMove;
-                bt = bestValue <= oldAlpha
+                Move ttm = bestValue <= oldAlpha ? MoveC.MOVE_NONE : bestMove;
+                Bound bt = bestValue <= oldAlpha
                          ? Bound.BOUND_UPPER
                          : bestValue >= beta ? Bound.BOUND_LOWER : Bound.BOUND_EXACT;
 
@@ -1458,22 +1457,22 @@ namespace Portfish
                     value_to_tt(bestValue, ss[ssPos].ply),
                     bt,
                     depth,
-                    move,
+                    ttm,
                     ss[ssPos].eval,
                     ss[ssPos].evalMargin);
 
                 // Update killers and history for non capture cut-off moves
-                if (!inCheck && bestValue >= beta && !pos.is_capture_or_promotion(move))
+                if (!inCheck && bestValue >= beta && !pos.is_capture_or_promotion(bestMove))
                 {
-                    if (move != ss[ssPos].killers0)
+                    if (bestMove != ss[ssPos].killers0)
                     {
                         ss[ssPos].killers1 = ss[ssPos].killers0;
-                        ss[ssPos].killers0 = move;
+                        ss[ssPos].killers0 = bestMove;
                     }
 
                     // Increase history value of the cut-off move
                     var bonus = (depth * depth);
-                    H.add(pos.piece_moved(move), Utils.to_sq(move), bonus);
+                    H.add(pos.piece_moved(bestMove), Utils.to_sq(bestMove), bonus);
 
                     // Decrease history of all the other played non-capture moves
                     for (var i = 0; i < playedMoveCount - 1; i++)
