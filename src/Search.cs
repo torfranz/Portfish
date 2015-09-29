@@ -767,7 +767,7 @@ namespace Portfish
             ulong posKey = 0;
             int ttMove, move, excludedMove, bestMove, threatMove;
             int ext, newDepth;
-            int bestValue, value, oldAlpha, ttValue;
+            int bestValue, value, ttValue;
             int refinedValue, nullValue, futilityValue;
             bool pvMove, inCheck, singularExtensionNode, givesCheck;
             bool captureOrPromotion, dangerous, doFullDepthSearch;
@@ -777,8 +777,6 @@ namespace Portfish
             // Step 1. Initialize node
             var thisThread = pos.this_thread();
             
-            refinedValue = bestValue = value = -ValueC.VALUE_INFINITE;
-            oldAlpha = alpha;
             inCheck = pos.in_check();
             
             if (SpNode)
@@ -1352,14 +1350,16 @@ namespace Portfish
                 if (value > bestValue)
                 {
                     bestValue = value;
-                    bestMove = move;
-
-                    if (PvNode && value > alpha && value < beta) // We want always alpha < beta
+                    if (value > alpha)
                     {
-                        alpha = bestValue; // Update alpha here!
+                        bestMove = move;
+                        if (PvNode && value < beta)
+                        {
+                            alpha = bestValue; // Update alpha here! Always alpha < beta
+                        }
                     }
 
-                    if (SpNode && !thisThread.cutoff_occurred())
+                    if (SpNode)
                     {
                         sp.bestValue = bestValue;
                         sp.bestMove = bestMove;
@@ -1374,7 +1374,7 @@ namespace Portfish
 
                 // Step 19. Check for split
                 if (!SpNode && depth >= Threads.min_split_depth() && bestValue < beta
-                    && Threads.available_slave_exists(thisThread) && !SignalsStop && !thisThread.cutoff_occurred())
+                    && Threads.available_slave_exists(thisThread))
                 {
                     bestValue = Threads.split(
                         Constants.FakeSplit,
@@ -1420,26 +1420,18 @@ namespace Portfish
                 bestValue = alpha;
             }
 
-            // Step 21. Update tables
-            // Update transposition table entry, killers and history
-            if (!SpNode && !SignalsStop && !thisThread.cutoff_occurred())
+            if (bestValue >= beta) // Failed high
             {
-                Move ttm = bestValue <= oldAlpha ? MoveC.MOVE_NONE : bestMove;
-                Bound bt = bestValue <= oldAlpha
-                         ? Bound.BOUND_UPPER
-                         : bestValue >= beta ? Bound.BOUND_LOWER : Bound.BOUND_EXACT;
-
                 TT.store(
                     posKey,
                     value_to_tt(bestValue, ss[ssPos].ply),
-                    bt,
+                    Bound.BOUND_LOWER,
                     depth,
-                    ttm,
+                    bestMove,
                     ss[ssPos].eval,
                     ss[ssPos].evalMargin);
 
-                // Update killers and history for non capture cut-off moves
-                if (!inCheck && bestValue >= beta && !pos.is_capture_or_promotion(bestMove))
+                if (!pos.is_capture_or_promotion(bestMove) && !inCheck)
                 {
                     if (bestMove != ss[ssPos].killers0)
                     {
@@ -1458,6 +1450,10 @@ namespace Portfish
                         H.add(pos.piece_moved(m), Utils.to_sq(m), -bonus);
                     }
                 }
+            }
+            else // Failed low or PV search
+            {
+                TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, depth, bestMove, ss[ssPos].eval, ss[ssPos].evalMargin);
             }
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
