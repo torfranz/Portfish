@@ -300,6 +300,8 @@ namespace Portfish
 
         internal static int RootColor;
 
+        internal static int ValueDrawContempt;
+
         internal static void init()
         {
             // Alloc arrays
@@ -347,6 +349,8 @@ namespace Portfish
                 KingDangerTable[1][i] = Utils.apply_weight(Utils.make_score(t, 0), Weights[EvalWeightC.KingDangerUs]);
                 KingDangerTable[0][i] = Utils.apply_weight(Utils.make_score(t, 0), Weights[EvalWeightC.KingDangerThem]);
             }
+
+            ValueDrawContempt = ValueC.VALUE_DRAW - int.Parse(OptionMap.Instance["Contempt Factor"].v) * Constants.PawnValueMidgame / 100;
         }
 
         /// trace() is like evaluate() but instead of a value returns a string suitable

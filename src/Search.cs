@@ -456,8 +456,8 @@ namespace Portfish
             {
                 var bookMove = PolyglotBook.probe(
                     pos,
-                    OptionMap.Instance["PolyglotBook File"].v,
-                    bool.Parse(OptionMap.Instance["Best PolyglotBook Move"].v));
+                    OptionMap.Instance["Book File"].v,
+                    bool.Parse(OptionMap.Instance["Best Book Move"].v));
                 if ((bookMove != 0) && Utils.existRootMove(RootMoves, bookMove))
                 {
                     var bestpos = find(RootMoves, 0, RootMoves.Count, bookMove);
@@ -816,7 +816,7 @@ namespace Portfish
                 if ((SignalsStop || pos.is_draw(false) || ss[ssPos].ply > Constants.MAX_PLY))
                 {
                     MovesSearchedBroker.Free();
-                    return ValueC.VALUE_DRAW;
+                    return Evaluate.ValueDrawContempt;
                 }
 
                 // Step 3. Mate distance pruning. Even if we mate at the next move our score
@@ -1504,7 +1504,7 @@ namespace Portfish
             // Check for an instant draw or maximum ply reached
             if (pos.is_draw(true) || ss[ssPos].ply > Constants.MAX_PLY)
             {
-                return ValueC.VALUE_DRAW;
+                return Evaluate.ValueDrawContempt;
             }
 
             // Decide whether or not to include checks, this fixes also the type of
