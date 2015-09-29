@@ -182,7 +182,7 @@ namespace Portfish
                 // BISHOP
                 new[]
                     {
-                        Utils.make_score(0, 0), Utils.make_score(-1, 29),
+                        Utils.make_score(0, 0), Utils.make_score(0, 22),
                         Utils.make_score(15, 49), Utils.make_score(15, 49),
                         Utils.make_score(0, 0), Utils.make_score(24, 49)
                     },
@@ -209,9 +209,13 @@ namespace Portfish
         internal const int Tempo = 1572875; // Utils.make_score(24, 11);
 
         // Rooks and queens on the 7th rank (modified by Joona Kiiski)
-        internal const int RookOn7thBonus = 3080290; // Utils.make_score(47, 98);
+        internal const int RookOn7thBonus = ((3 << 16) + 20); // Utils.make_score(3, 20);
 
-        internal const int QueenOn7thBonus = 1769526; // Utils.make_score(27, 54);
+        internal const int QueenOn7thBonus = ((1 << 16) + 8); // Utils.make_score(1, 8);
+
+        // Rooks and queens attacking pawns on the same rank
+        internal const int RookOnPawnBonus = ((3 << 16) + 48); // Utils.make_score(3, 48);
+        internal const int QueenOnPawnBonus = ((1 << 16) + 40); // Utils.make_score(1, 40);
 
         // Rooks on open files (modified by Joona Kiiski)
         internal const int RookOpenFileBonus = 2818069; // Utils.make_score(43, 21);
@@ -811,11 +815,19 @@ namespace Portfish
                         #endregion
                     }
 
-                    // Queen or rook on 7th rank
-                    if ((Piece == PieceTypeC.ROOK || Piece == PieceTypeC.QUEEN) && ((s >> 3) ^ (Us * 7)) == RankC.RANK_7
-                        && (((pos.pieceList[Them][PieceTypeC.KING][0]) >> 3) ^ (Us * 7)) == RankC.RANK_8)
+                    if ((Piece == PieceTypeC.ROOK || Piece == PieceTypeC.QUEEN) && Utils.relative_rank_CS(Us, s) >= RankC.RANK_5)
                     {
-                        score += (Piece == PieceTypeC.ROOK ? RookOn7thBonus : QueenOn7thBonus);
+                        // Major piece on 7th rank
+                        if (Utils.relative_rank_CS(Us, s) == RankC.RANK_7
+                            && Utils.relative_rank_CS(Us, pos.king_square(Them)) == RankC.RANK_8)
+                            score += (Piece == PieceTypeC.ROOK ? RookOn7thBonus : QueenOn7thBonus);
+
+                        // Major piece attacking pawns on the same rank
+                        Bitboard pawns = pos.pieces_PTC(PieceTypeC.PAWN, Them) & Utils.rank_bb_S(s);
+                        if (pawns != 0)
+                        {
+                            score += (Piece == PieceTypeC.ROOK ? RookOnPawnBonus : QueenOnPawnBonus) * Bitcount.popcount_1s_Max15(pawns);
+                        }
                     }
 
                     // Special extra evaluation for bishops
