@@ -2050,7 +2050,7 @@ namespace Portfish
             }
 
             int from, to;
-            ulong occupied, attackers, stmAttackers, b;
+            ulong occupied, attackers, stmAttackers;
 
             var slIndex = 1;
             int captured;
@@ -2115,29 +2115,10 @@ namespace Portfish
                 swapList[slIndex] = -swapList[slIndex - 1] + PieceValue[Constants.Midgame][captured];
                 slIndex++;
 
-                // Locate the least valuable attacker for the side to move. The loop
-                // below looks like it is potentially infinite, but it isn't. We know
-                // that the side to move still has at least one attacker left.
-                for (captured = PieceTypeC.PAWN; (b = (stmAttackers & this.byTypeBB[captured])) == 0; captured++)
-                {
-                    Debug.Assert(captured < PieceTypeC.KING);
-                }
+                // Locate and remove from 'occupied' the next least valuable attacker
+                captured = this.next_attacker(PieceTypeC.PAWN, to, stmAttackers, ref occupied, ref attackers);
 
-                // Remove the attacker we just found from the 'occupied' bitboard,
-                // and scan for new X-ray attacks behind the attacker.
-                occupied ^= (b & (~b + 1));
-
-#if X64
-                attackers |= ((Utils.RAttacks[to][(((occupied & Utils.RMasks[to]) * Utils.RMagics[to]) >> Utils.RShifts[to])]) & (byTypeBB[PieceTypeC.ROOK] | byTypeBB[PieceTypeC.QUEEN]))
-                            | ((Utils.BAttacks[to][(((occupied & Utils.BMasks[to]) * Utils.BMagics[to]) >> Utils.BShifts[to])]) & (byTypeBB[PieceTypeC.BISHOP] | byTypeBB[PieceTypeC.QUEEN]));
-#else
-                attackers |= (Utils.rook_attacks_bb(to, occupied)
-                              & (this.byTypeBB[PieceTypeC.ROOK] | this.byTypeBB[PieceTypeC.QUEEN]))
-                             | (Utils.bishop_attacks_bb(to, occupied)
-                                & (this.byTypeBB[PieceTypeC.BISHOP] | this.byTypeBB[PieceTypeC.QUEEN]));
-#endif
-
-                attackers &= occupied; // Cut out pieces we've already done
+                attackers &= occupied; // Remove the just found attacker
 
                 stm = stm ^ 1;
                 stmAttackers = attackers & this.byColorBB[stm];
@@ -2163,6 +2144,30 @@ namespace Portfish
             SwapListBroker.Free();
 
             return retval;
+        }
+
+        internal PieceType next_attacker(PieceType Pt, Square to, ulong stmAttackers, ref ulong occupied, ref ulong attackers)
+        {
+            if (Pt == PieceTypeC.KING)
+            {
+                return PieceTypeC.KING;
+            }
+
+          PieceType NextPt = Pt + 1;
+
+          if ((stmAttackers & this.byTypeBB[Pt]) == 0)
+              return this.next_attacker(NextPt, to, stmAttackers, ref occupied, ref attackers);
+
+          Bitboard b = stmAttackers & this.byTypeBB[Pt];
+          occupied ^= b & ~(b - 1);
+
+          if (Pt == PieceTypeC.PAWN || Pt == PieceTypeC.BISHOP || Pt == PieceTypeC.QUEEN)
+              attackers |= Utils.bishop_attacks_bb(to, occupied) & (this.byTypeBB[PieceTypeC.BISHOP] | this.byTypeBB[PieceTypeC.QUEEN]);
+
+          if (Pt == PieceTypeC.ROOK || Pt == PieceTypeC.QUEEN)
+              attackers |= Utils.rook_attacks_bb(to, occupied) & (this.byTypeBB[PieceTypeC.ROOK] | this.byTypeBB[PieceTypeC.QUEEN]);
+
+          return Pt;
         }
 
         /// clear() erases the position object to a pristine state, with an
