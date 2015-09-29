@@ -789,7 +789,7 @@ namespace Portfish
             Bound bt;
             int bestValue, value, oldAlpha, ttValue;
             int refinedValue, nullValue, futilityBase, futilityValue;
-            bool isPvMove, inCheck, singularExtensionNode, givesCheck;
+            bool pvMove, inCheck, singularExtensionNode, givesCheck;
             bool captureOrPromotion, dangerous, doFullDepthSearch;
             int moveCount = 0, playedMoveCount = 0;
             var thisThread = pos.this_thread();
@@ -1151,14 +1151,14 @@ namespace Portfish
                     continue;
                 }
 
-                // At PV and SpNode nodes we want all moves to be legal since the beginning
-                if ((PvNode || SpNode) && !pos.pl_move_is_legal(move, ci.pinned))
-                {
-                    continue;
-                }
-
                 if (SpNode)
                 {
+                    // Shared counter cannot be decremented later if move turns out to be illegal
+                    if (!pos.pl_move_is_legal(move, ci.pinned))
+                    {
+                        continue;
+                    }
+
                     moveCount = ++sp.moveCount;
                     ThreadHelper.lock_release(sp.Lock);
                 }
@@ -1185,7 +1185,6 @@ namespace Portfish
                     }
                 }
 
-                isPvMove = (PvNode && moveCount <= 1);
                 captureOrPromotion = pos.is_capture_or_promotion(move);
                 givesCheck = pos.move_gives_check(move, ci);
                 dangerous = givesCheck || is_dangerous(pos, move, captureOrPromotion);
@@ -1276,6 +1275,7 @@ namespace Portfish
                     continue;
                 }
 
+                pvMove = (PvNode && moveCount <= 1);
                 ss[ssPos].currentMove = move;
                 if (!SpNode && !captureOrPromotion && playedMoveCount < 64)
                 {
@@ -1291,7 +1291,7 @@ namespace Portfish
 
                 // Step 15. Reduced depth search (LMR). If the move fails high will be
                 // re-searched at full depth.
-                if (!isPvMove && !captureOrPromotion && !dangerous && ss[ssPos].killers0 != move
+                if (!pvMove && !captureOrPromotion && !dangerous && ss[ssPos].killers0 != move
                     && ss[ssPos].killers1 != move && depth > 3 * DepthC.ONE_PLY)
                 {
                     ss[ssPos].reduction = reduction(PvNode, depth, moveCount);
@@ -1305,7 +1305,7 @@ namespace Portfish
                 }
                 else
                 {
-                    doFullDepthSearch = !isPvMove;
+                    doFullDepthSearch = !pvMove;
                 }
 
                 // Step 16. Full depth search, when LMR is skipped or fails high
@@ -1320,7 +1320,7 @@ namespace Portfish
                 // Only for PV nodes do a full PV search on the first move or after a fail
                 // high, in the latter case search only if value < beta, otherwise let the
                 // parent node to fail low with value <= alpha and to try another move.
-                if (PvNode && (isPvMove || (value > alpha && (RootNode || value < beta))))
+                if (PvNode && (pvMove || (value > alpha && (RootNode || value < beta))))
                 {
                     value = newDepth < DepthC.ONE_PLY
                                 ? -qsearch(NodeTypeC.PV, pos, ss, ssPos + 1, -beta, -alpha, DepthC.DEPTH_ZERO)
@@ -1349,7 +1349,7 @@ namespace Portfish
                     var rmPos = find(RootMoves, 0, RootMoves.Count, move);
 
                     // PV move or new best move ?
-                    if (isPvMove || value > alpha)
+                    if (pvMove || value > alpha)
                     {
                         RootMoves[rmPos].score = value;
                         RootMoves[rmPos].extract_pv_from_tt(pos);
@@ -1357,7 +1357,7 @@ namespace Portfish
                         // We record how often the best move has been changed in each
                         // iteration. This information is used for time management: When
                         // the best move changes frequently, we allocate some more time.
-                        if (!isPvMove && MultiPV == 1)
+                        if (!pvMove && MultiPV == 1)
                         {
                             BestMoveChanges++;
                         }
