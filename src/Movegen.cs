@@ -81,7 +81,9 @@ namespace Portfish
 
             Debug.Assert(!pos.in_check());
 
-            for (Square s = kto; s != kfrom; s += Side == CastlingSideC.KING_SIDE ? -1 : 1)
+            int K = pos.chess960 ? kto > kfrom ? -1 : 1 : Side == CastlingSideC.KING_SIDE ? -1 : 1;
+            
+            for (Square s = kto; s != kfrom; s += (Square)K)
             {
                 if ((pos.attackers_to(s) & enemies) != 0)
                 {
