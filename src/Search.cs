@@ -246,15 +246,6 @@ namespace Portfish
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #endif
 
-        internal static int futility_move_count(int d)
-        {
-            return d < 16 * DepthC.ONE_PLY ? FutilityMoveCounts[d] : Constants.MAX_MOVES;
-        }
-
-#if AGGR_INLINE
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-#endif
-
         internal static int reduction(bool PvNode, int d, int mn)
         {
             return Reductions[PvNode ? 1 : 0][Math.Min((d) / DepthC.ONE_PLY, 63)][Math.Min(mn, 63)];
@@ -918,11 +909,11 @@ namespace Portfish
             // We're betting that the opponent doesn't have a move that will reduce
             // the score by more than futility_margin(depth) if we do a null move.
             if (!PvNode && !inCheck && (ss[ssPos].skipNullMove == 0) && depth < 4 * DepthC.ONE_PLY
-                && Math.Abs(beta) < ValueC.VALUE_MATE_IN_MAX_PLY && refinedValue - futility_margin(depth, 0) >= beta
+                && Math.Abs(beta) < ValueC.VALUE_MATE_IN_MAX_PLY && refinedValue - FutilityMargins[depth][0] >= beta
                 && (pos.non_pawn_material(pos.sideToMove) != 0))
             {
                 MovesSearchedBroker.Free();
-                return refinedValue - futility_margin(depth, 0);
+                return refinedValue - FutilityMargins[depth][0];
             }
 
             // Step 8. Null move search with verification search (is omitted in PV nodes)
@@ -1107,7 +1098,7 @@ namespace Portfish
 
             // Step 11. Loop through moves
             // Loop through all pseudo-legal moves until no moves remain or a beta cutoff occurs
-            while (bestValue < beta && (move = mp.next_move()) != MoveC.MOVE_NONE && !thisThread.cutoff_occurred()
+            while ((move = mp.next_move()) != MoveC.MOVE_NONE && !thisThread.cutoff_occurred()
                    && !SignalsStop)
             {
                 Debug.Assert(Utils.is_ok_M(move));
@@ -1204,7 +1195,8 @@ namespace Portfish
                     && (bestValue > ValueC.VALUE_MATED_IN_MAX_PLY || bestValue == -ValueC.VALUE_INFINITE))
                 {
                     // Move count based pruning
-                    if (moveCount >= futility_move_count(depth)
+                    if (depth < 16 * DepthC.ONE_PLY
+                        && moveCount >= FutilityMoveCounts[depth]
                         && ((threatMove == 0) || !connected_threat(pos, move, threatMove)))
                     {
                         if (SpNode)
@@ -1350,24 +1342,22 @@ namespace Portfish
                 if (value > bestValue)
                 {
                     bestValue = value;
+                    if (SpNode) sp.bestValue = value;
+
                     if (value > alpha)
                     {
                         bestMove = move;
+                        if (SpNode) sp.bestMove = move;
+
                         if (PvNode && value < beta)
                         {
-                            alpha = bestValue; // Update alpha here! Always alpha < beta
+                            alpha = value; // Update alpha here! Always alpha < beta
+                            if (SpNode) sp.alpha = alpha;
                         }
-                    }
-
-                    if (SpNode)
-                    {
-                        sp.bestValue = bestValue;
-                        sp.bestMove = bestMove;
-                        sp.alpha = alpha;
-
-                        if (bestValue >= beta)
+                        else // Fail high
                         {
-                            sp.cutoff = true;
+                            if (SpNode) sp.cutoff = true;
+                            break;
                         }
                     }
                 }
@@ -1390,6 +1380,7 @@ namespace Portfish
                         moveCount,
                         mp,
                         NT);
+                    break;
                 }
             }
 
