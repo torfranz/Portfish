@@ -81,10 +81,9 @@ namespace Portfish
 
             Debug.Assert(!pos.in_check());
 
-            for (int s = Math.Min(kfrom, kto), e = Math.Max(kfrom, kto); s <= e; s++)
+            for (Square s = kto; s != kfrom; s += Side == CastlingSideC.KING_SIDE ? -1 : 1)
             {
-                if (s != kfrom // We are not in check
-                    && ((pos.attackers_to(s) & enemies) != 0))
+                if ((pos.attackers_to(s) & enemies) != 0)
                 {
                     return;
                 }
