@@ -383,6 +383,7 @@ namespace Portfish
         {
             /// generate<LEGAL> generates all the legal moves in the given position
             var pinned = pos.pinned_pieces();
+            Square ksq = pos.king_square(pos.sideToMove);
 
             if (pos.in_check())
             {
@@ -397,7 +398,9 @@ namespace Portfish
             var cur = 0;
             while (cur != last)
             {
-                if (!pos.pl_move_is_legal(ms[cur].move, pinned))
+                var curMove = ms[cur].move;
+                //if (!pos.pl_move_is_legal(ms[cur].move, pinned))
+                if ((pinned != 0 || Utils.from_sq(curMove) == ksq || Utils.type_of_move(curMove) == MoveTypeC.ENPASSANT) && !pos.pl_move_is_legal(curMove, pinned))
                 {
                     ms[cur].move = ms[--last].move;
                 }
