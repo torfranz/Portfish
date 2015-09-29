@@ -60,7 +60,7 @@ namespace Portfish
 
         private static void generate_castle(
             int Side,
-            bool OnlyChecks,
+            bool Checks,
             Position pos,
             MoveStack[] ms,
             ref int mpos,
@@ -99,7 +99,7 @@ namespace Portfish
 
             var m = Utils.make(kfrom, rfrom, MoveTypeC.CASTLING);
 
-            if (OnlyChecks)
+            if (Checks)
             {
                 var ci = CheckInfoBroker.GetObject();
                 ci.CreateCheckInfo(pos);
@@ -121,7 +121,7 @@ namespace Portfish
             ref int mpos,
             ulong pawnsOn7,
             ulong target,
-            int ksq)
+            CheckInfo ci)
         {
             var b = move_pawns(Delta, pawnsOn7) & target;
             while (b != 0)
@@ -143,7 +143,7 @@ namespace Portfish
                 // Knight-promotion is the only one that can give a direct check not
                 // already included in the queen-promotion.
                 if (Type == GenType.QUIET_CHECKS
-                    && (Utils.bit_is_set(Utils.StepAttacksBB[PieceC.W_KNIGHT][to], ksq) != 0))
+                    && (Utils.bit_is_set(Utils.StepAttacksBB[PieceC.W_KNIGHT][to], ci.ksq) != 0))
                 {
                     ms[mpos++].move = Utils.make(to - Delta, to, MoveTypeC.PROMOTION, PieceTypeC.KNIGHT);
                 }
@@ -157,7 +157,7 @@ namespace Portfish
             MoveStack[] ms,
             ref int mpos,
             ulong target,
-            int ksq)
+            CheckInfo ci)
         {
             // Compute our parametrized parameters at compile time, named according to
             // the point of view of white side.
@@ -195,16 +195,16 @@ namespace Portfish
 
                 if (Type == GenType.QUIET_CHECKS)
                 {
-                    b1 &= Utils.StepAttacksBB[((Them << 3) | PieceTypeC.PAWN)][ksq];
-                    b2 &= Utils.StepAttacksBB[((Them << 3) | PieceTypeC.PAWN)][ksq];
+                    b1 &= Utils.StepAttacksBB[((Them << 3) | PieceTypeC.PAWN)][ci.ksq];
+                    b2 &= Utils.StepAttacksBB[((Them << 3) | PieceTypeC.PAWN)][ci.ksq];
 
                     // Add pawn pushes which give discovered check. This is possible only
                     // if the pawn is not on the same file as the enemy king, because we
                     // don't generate captures. Note that a possible discovery check
                     // promotion has been already generated among captures.
-                    if ((pawnsNotOn7 & target) != 0) // Target is dc bitboard
+                    if ((pawnsNotOn7 & ci.dcCandidates) != 0) // Target is dc bitboard
                     {
-                        dc1 = move_pawns(UP, pawnsNotOn7 & target) & emptySquares & ~(Utils.FileBB[ksq & 7]);
+                        dc1 = move_pawns(UP, pawnsNotOn7 & ci.dcCandidates) & emptySquares & ~(Utils.FileBB[ci.ksq & 7]);
                         dc2 = move_pawns(UP, dc1 & TRank3BB) & emptySquares;
 
                         b1 |= dc1;
@@ -237,9 +237,9 @@ namespace Portfish
                     emptySquares &= target;
                 }
 
-                generate_promotions(Type, RIGHT, ms, ref mpos, pawnsOn7, enemies, ksq);
-                generate_promotions(Type, LEFT, ms, ref mpos, pawnsOn7, enemies, ksq);
-                generate_promotions(Type, UP, ms, ref mpos, pawnsOn7, emptySquares, ksq);
+                generate_promotions(Type, RIGHT, ms, ref mpos, pawnsOn7, enemies, ci);
+                generate_promotions(Type, LEFT, ms, ref mpos, pawnsOn7, enemies, ci);
+                generate_promotions(Type, UP, ms, ref mpos, pawnsOn7, emptySquares, ci);
             }
 
             // Standard and en-passant captures
@@ -283,9 +283,59 @@ namespace Portfish
             }
         }
 
+        private static void generate_king_moves(
+            Position pos,
+            MoveStack[] mlist,
+            ref int mpos,
+            int us,
+            ulong target)
+        {
+            Square from = pos.king_square(us);
+            Bitboard b = Position.attacks_from_KING(from) & target;
+            // SERIALIZE(b);
+            while (b != 0)
+            {
+#if X64
+                Bitboard bb = b;
+                b &= (b - 1);
+                mlist[mpos++].move = ((Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * 0x218A392CD3D5DBFUL) >> 58]) | (from << 6));
+#else
+                mlist[mpos++].move = Utils.make_move(from, Utils.pop_lsb(ref b));
+#endif
+            }
+        }
+
+        private static void generate_all_moves(
+            GenType type,
+            Position pos,
+            MoveStack[] mlist,
+            ref int mpos,
+            int us,
+            ulong target,
+            CheckInfo ci)
+        {
+            generate_pawn_moves(us, type, pos, mlist, ref mpos, target, ci);
+
+            generate_moves(PieceTypeC.KNIGHT, type == GenType.QUIET_CHECKS, pos, mlist, ref mpos, us, target, ci);
+            generate_moves(PieceTypeC.BISHOP, type == GenType.QUIET_CHECKS, pos, mlist, ref mpos, us, target, ci);
+            generate_moves(PieceTypeC.ROOK, type == GenType.QUIET_CHECKS, pos, mlist, ref mpos, us, target, ci);
+            generate_moves(PieceTypeC.QUEEN, type == GenType.QUIET_CHECKS, pos, mlist, ref mpos, us, target, ci);
+
+            if (type != GenType.QUIET_CHECKS && type != GenType.EVASIONS)
+            {
+                generate_king_moves(pos, mlist, ref mpos, us, target);
+            }
+            
+            if (type != GenType.CAPTURES && type != GenType.EVASIONS && pos.can_castle_C(us) != 0)
+            {
+                generate_castle(CastlingSideC.KING_SIDE, type == GenType.QUIET_CHECKS, pos, mlist, ref mpos, us);
+                generate_castle(CastlingSideC.QUEEN_SIDE, type == GenType.QUIET_CHECKS, pos, mlist, ref mpos, us);
+            }
+        }
+
         private static void generate_moves(
             int Pt,
-            bool onlyChecks,
+            bool Checks,
             Position pos,
             MoveStack[] mlist,
             ref int mpos,
@@ -295,25 +345,12 @@ namespace Portfish
         {
             Debug.Assert(Pt != PieceTypeC.KING && Pt != PieceTypeC.PAWN);
 
-            // specialization for KING, false
-            if (Pt == PieceTypeC.KING && !onlyChecks)
-            {
-                Square from = pos.king_square(us);
-                Bitboard b = Position.attacks_from_KING(from) & (ulong)target;
-                // SERIALIZE(b);
-                while (b != 0)
-                {
-                    mlist[mpos++].move = Utils.make_move(from, Utils.pop_lsb(ref b));
-                }
-                return;
-            }
-
             var pl = pos.pieceList[us][Pt];
             var plPos = 0;
             
             for (var from = pl[plPos]; from != SquareC.SQ_NONE; from = pl[++plPos])
             {
-                if (onlyChecks)
+                if (Checks)
                 {
                     if ((Pt == PieceTypeC.BISHOP || Pt == PieceTypeC.ROOK || Pt == PieceTypeC.QUEEN)
                         && ((Utils.PseudoAttacks[Pt][from] & (ulong)target & ci.checkSq[Pt]) == 0))
@@ -329,7 +366,7 @@ namespace Portfish
 
                 var b = pos.attacks_from_PTS(Pt, from) & (ulong)target;
 
-                if (onlyChecks)
+                if (Checks)
                 {
                     b &= ci.checkSq[Pt];
                 }
@@ -339,22 +376,6 @@ namespace Portfish
                 {
                     mlist[mpos++].move = Utils.make_move(from, Utils.pop_lsb(ref b));
                 }
-            }
-        }
-
-        private static void generate_king_moves(Position pos, MoveStack[] ms, ref int mpos, int us, ulong target)
-        {
-            var from = pos.pieceList[us][PieceTypeC.KING][0];
-            var b = Utils.StepAttacksBB_KING[from] & target;
-            while (b != 0)
-            {
-#if X64
-                Bitboard bb = b;
-                b &= (b - 1);
-                ms[mpos++].move = ((Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * 0x218A392CD3D5DBFUL) >> 58]) | (from << 6));
-#else
-                ms[mpos++].move = Utils.make_move(from, Utils.pop_lsb(ref b));
-#endif
             }
         }
 
@@ -463,11 +484,8 @@ namespace Portfish
 
             // Blocking evasions or captures of the checking piece
             var target = Utils.between_bb(checksq, ksq) | checkers;
-            generate_pawn_moves(us, GenType.EVASIONS, pos, ms, ref mpos, target, SquareC.SQ_NONE);
-            generate_moves(PieceTypeC.KNIGHT, false, pos, ms, ref mpos, us, target, null);
-            generate_moves(PieceTypeC.BISHOP, false, pos, ms, ref mpos, us, target, null);
-            generate_moves(PieceTypeC.ROOK, false, pos, ms, ref mpos, us, target, null);
-            generate_moves(PieceTypeC.QUEEN, false, pos, ms, ref mpos, us, target, null);
+
+            generate_all_moves(GenType.EVASIONS, pos, ms, ref mpos, us, target, null);
         }
 
         internal static void generate_quiet_check(Position pos, MoveStack[] ms, ref int mpos)
@@ -505,18 +523,7 @@ namespace Portfish
                 }
             }
 
-            generate_pawn_moves(us, GenType.QUIET_CHECKS, pos, ms, ref mpos, ci.dcCandidates, ci.ksq);
-
-            generate_moves(PieceTypeC.KNIGHT, true, pos, ms, ref mpos, us, target, ci);
-            generate_moves(PieceTypeC.BISHOP, true, pos, ms, ref mpos, us, target, ci);
-            generate_moves(PieceTypeC.ROOK, true, pos, ms, ref mpos, us, target, ci);
-            generate_moves(PieceTypeC.QUEEN, true, pos, ms, ref mpos, us, target, ci);
-            
-            if (pos.can_castle_C(us) != 0)
-            {
-                generate_castle(CastlingSideC.KING_SIDE, true, pos, ms, ref mpos, us);
-                generate_castle(CastlingSideC.QUEEN_SIDE, true, pos, ms, ref mpos, us);
-            }
+            generate_all_moves(GenType.QUIET_CHECKS, pos, ms, ref mpos, us, target, ci);
 
             CheckInfoBroker.Free();
         }
@@ -528,18 +535,7 @@ namespace Portfish
             var us = pos.sideToMove;
             var target = ~pos.occupied_squares;
 
-            generate_pawn_moves(us, GenType.QUIETS, pos, ms, ref mpos, target, SquareC.SQ_NONE);
-            generate_moves(PieceTypeC.KNIGHT, false, pos, ms, ref mpos, us, target, null);
-            generate_moves(PieceTypeC.BISHOP, false, pos, ms, ref mpos, us, target, null);
-            generate_moves(PieceTypeC.ROOK, false, pos, ms, ref mpos, us, target, null);
-            generate_moves(PieceTypeC.QUEEN, false, pos, ms, ref mpos, us, target, null);
-            generate_king_moves(pos, ms, ref mpos, us, target);
-
-            if ((pos.st.castleRights & (CastleRightC.WHITE_ANY << (us << 1))) != 0)
-            {
-                generate_castle(CastlingSideC.KING_SIDE, false, pos, ms, ref mpos, us);
-                generate_castle(CastlingSideC.QUEEN_SIDE, false, pos, ms, ref mpos, us);
-            }
+            generate_all_moves(GenType.QUIETS, pos, ms, ref mpos, us, target, null);
         }
 
         internal static void generate_non_evasion(Position pos, MoveStack[] ms, ref int mpos)
@@ -549,18 +545,7 @@ namespace Portfish
             var us = pos.sideToMove;
             var target = ~(pos.byColorBB[us]);
 
-            generate_pawn_moves(us, GenType.NON_EVASIONS, pos, ms, ref mpos, target, SquareC.SQ_NONE);
-            generate_moves(PieceTypeC.KNIGHT, false, pos, ms, ref mpos, us, target, null);
-            generate_moves(PieceTypeC.BISHOP, false, pos, ms, ref mpos, us, target, null);
-            generate_moves(PieceTypeC.ROOK, false, pos, ms, ref mpos, us, target, null);
-            generate_moves(PieceTypeC.QUEEN, false, pos, ms, ref mpos, us, target, null);
-            generate_king_moves(pos, ms, ref mpos, us, target);
-
-            if ((pos.st.castleRights & (CastleRightC.WHITE_ANY << (us << 1))) != 0)
-            {
-                generate_castle(CastlingSideC.KING_SIDE, false, pos, ms, ref mpos, us);
-                generate_castle(CastlingSideC.QUEEN_SIDE, false, pos, ms, ref mpos, us);
-            }
+            generate_all_moves(GenType.NON_EVASIONS, pos, ms, ref mpos, us, target, null);
         }
 
         internal static void generate_capture(Position pos, MoveStack[] ms, ref int mpos)
@@ -570,12 +555,7 @@ namespace Portfish
             var us = pos.sideToMove;
             var target = pos.byColorBB[us ^ 1];
 
-            generate_pawn_moves(us, GenType.CAPTURES, pos, ms, ref mpos, target, SquareC.SQ_NONE);
-            generate_moves(PieceTypeC.KNIGHT, false, pos, ms, ref mpos, us, target, null);
-            generate_moves(PieceTypeC.BISHOP, false, pos, ms, ref mpos, us, target, null);
-            generate_moves(PieceTypeC.ROOK, false, pos, ms, ref mpos, us, target, null);
-            generate_moves(PieceTypeC.QUEEN, false, pos, ms, ref mpos, us, target, null);
-            generate_king_moves(pos, ms, ref mpos, us, target);
+            generate_all_moves(GenType.CAPTURES, pos, ms, ref mpos, us, target, null);
         }
     }
 }
