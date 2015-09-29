@@ -2114,14 +2114,13 @@ namespace Portfish
                 // Locate the least valuable attacker for the side to move. The loop
                 // below looks like it is potentially infinite, but it isn't. We know
                 // that the side to move still has at least one attacker left.
-                for (pt = PieceTypeC.PAWN; (stmAttackers & this.byTypeBB[pt]) == 0; pt++)
+                for (pt = PieceTypeC.PAWN; (b = (stmAttackers & this.byTypeBB[pt])) == 0; pt++)
                 {
                     Debug.Assert(pt < PieceTypeC.KING);
                 }
 
                 // Remove the attacker we just found from the 'occupied' bitboard,
                 // and scan for new X-ray attacks behind the attacker.
-                b = stmAttackers & this.byTypeBB[pt];
                 occ ^= (b & (~b + 1));
 
 #if X64
