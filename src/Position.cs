@@ -2050,51 +2050,49 @@ namespace Portfish
             }
 
             int from, to;
-            ulong occ, attackers, stmAttackers, b;
+            ulong occupied, attackers, stmAttackers, b;
 
             var slIndex = 1;
-            int capturedType, pt;
+            int captured;
             int stm;
 
             Debug.Assert(Utils.is_ok_M(m));
 
-            // As castle moves are implemented as capturing the rook, they have
-            // SEE == RookValueMidgame most of the times (unless the rook is under
-            // attack).
-            if ((m & (3 << 14)) == (3 << 14))
-            {
-                return 0;
-            }
-
-            from = ((m >> 6) & 0x3F);
-            to = (m & 0x3F);
-            capturedType = this.board[to] & 7;
-            occ = this.occupied_squares;
+            from = Utils.from_sq(m);
+            to = Utils.to_sq(m);
+            captured = this.board[to] & 7;
+            occupied = this.occupied_squares;
 
             // Handle en passant moves
             if (Utils.type_of_move(m) == MoveTypeC.ENPASSANT)
             {
                 var capQq = to - (this.sideToMove == ColorC.WHITE ? SquareC.DELTA_N : SquareC.DELTA_S);
 
-                Debug.Assert(capturedType == 0);
+                Debug.Assert(captured == 0);
                 Debug.Assert(Utils.type_of(this.piece_on(capQq)) == PieceTypeC.PAWN);
 
                 // Remove the captured pawn
-                occ ^= Utils.SquareBB[capQq];
-                capturedType = PieceTypeC.PAWN;
+                occupied ^= Utils.SquareBB[capQq];
+                captured = PieceTypeC.PAWN;
+            }
+            else if (Utils.type_of_move(m) == MoveTypeC.CASTLING)
+            {
+                // Castle moves are implemented as king capturing the rook so cannot be
+                // handled correctly. Simply return 0 that is always the correct value
+                // unless the rook is ends up under attack.
+                return 0;
             }
 
             // Find all attackers to the destination square, with the moving piece
             // removed, but possibly an X-ray attacker added behind it.
-            occ ^= Utils.SquareBB[from];
-            attackers = this.attackers_to(to, occ);
+            attackers = this.attackers_to(to, occupied);
 
             // If the opponent has no attackers we are finished
             stm = ((this.board[from] >> 3) ^ 1);
             stmAttackers = attackers & this.byColorBB[stm];
             if (stmAttackers == 0)
             {
-                return PieceValue[Constants.Midgame][capturedType];
+                return PieceValue[Constants.Midgame][captured];
             }
 
             // The destination square is defended, which makes things rather more
@@ -2106,48 +2104,46 @@ namespace Portfish
             var swap = SwapListBroker.GetObject();
             var swapList = swap.list;
 
-            swapList[0] = PieceValue[Constants.Midgame][capturedType];
-            capturedType = this.board[from] & 7;
+            swapList[0] = PieceValue[Constants.Midgame][captured];
+            captured = this.board[from] & 7;
 
             do
             {
+                Debug.Assert(slIndex < 32);
+                
+                // Add the new entry to the swap list
+                swapList[slIndex] = -swapList[slIndex - 1] + PieceValue[Constants.Midgame][captured];
+                slIndex++;
+
                 // Locate the least valuable attacker for the side to move. The loop
                 // below looks like it is potentially infinite, but it isn't. We know
                 // that the side to move still has at least one attacker left.
-                for (pt = PieceTypeC.PAWN; (b = (stmAttackers & this.byTypeBB[pt])) == 0; pt++)
+                for (captured = PieceTypeC.PAWN; (b = (stmAttackers & this.byTypeBB[captured])) == 0; captured++)
                 {
-                    Debug.Assert(pt < PieceTypeC.KING);
+                    Debug.Assert(captured < PieceTypeC.KING);
                 }
 
                 // Remove the attacker we just found from the 'occupied' bitboard,
                 // and scan for new X-ray attacks behind the attacker.
-                occ ^= (b & (~b + 1));
+                occupied ^= (b & (~b + 1));
 
 #if X64
-                attackers |= ((Utils.RAttacks[to][(((occ & Utils.RMasks[to]) * Utils.RMagics[to]) >> Utils.RShifts[to])]) & (byTypeBB[PieceTypeC.ROOK] | byTypeBB[PieceTypeC.QUEEN]))
-                            | ((Utils.BAttacks[to][(((occ & Utils.BMasks[to]) * Utils.BMagics[to]) >> Utils.BShifts[to])]) & (byTypeBB[PieceTypeC.BISHOP] | byTypeBB[PieceTypeC.QUEEN]));
+                attackers |= ((Utils.RAttacks[to][(((occupied & Utils.RMasks[to]) * Utils.RMagics[to]) >> Utils.RShifts[to])]) & (byTypeBB[PieceTypeC.ROOK] | byTypeBB[PieceTypeC.QUEEN]))
+                            | ((Utils.BAttacks[to][(((occupied & Utils.BMasks[to]) * Utils.BMagics[to]) >> Utils.BShifts[to])]) & (byTypeBB[PieceTypeC.BISHOP] | byTypeBB[PieceTypeC.QUEEN]));
 #else
-                attackers |= (Utils.rook_attacks_bb(to, occ)
+                attackers |= (Utils.rook_attacks_bb(to, occupied)
                               & (this.byTypeBB[PieceTypeC.ROOK] | this.byTypeBB[PieceTypeC.QUEEN]))
-                             | (Utils.bishop_attacks_bb(to, occ)
+                             | (Utils.bishop_attacks_bb(to, occupied)
                                 & (this.byTypeBB[PieceTypeC.BISHOP] | this.byTypeBB[PieceTypeC.QUEEN]));
 #endif
 
-                attackers &= occ; // Cut out pieces we've already done
+                attackers &= occupied; // Cut out pieces we've already done
 
-                // Add the new entry to the swap list
-                Debug.Assert(slIndex < 32);
-                swapList[slIndex] = -swapList[slIndex - 1] + PieceValue[Constants.Midgame][capturedType];
-                slIndex++;
-
-                // Remember the value of the capturing piece, and change the side to
-                // move before beginning the next iteration.
-                capturedType = pt;
                 stm = stm ^ 1;
                 stmAttackers = attackers & this.byColorBB[stm];
 
                 // Stop before processing a king capture
-                if (capturedType == PieceTypeC.KING && (stmAttackers != 0))
+                if (captured == PieceTypeC.KING && (stmAttackers != 0))
                 {
                     Debug.Assert(slIndex < 32);
                     swapList[slIndex++] = Constants.QueenValueMidgame * 10;
