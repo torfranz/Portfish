@@ -2153,21 +2153,21 @@ namespace Portfish
                 return PieceTypeC.KING;
             }
 
-          PieceType NextPt = Pt + 1;
+            if ((stmAttackers & this.byTypeBB[Pt]) != 0)
+            {
+                Bitboard b = stmAttackers & this.byTypeBB[Pt];
+                occupied ^= b & ~(b - 1);
 
-          if ((stmAttackers & this.byTypeBB[Pt]) == 0)
-              return this.next_attacker(NextPt, to, stmAttackers, ref occupied, ref attackers);
+                if (Pt == PieceTypeC.PAWN || Pt == PieceTypeC.BISHOP || Pt == PieceTypeC.QUEEN)
+                    attackers |= Utils.bishop_attacks_bb(to, occupied) & (this.byTypeBB[PieceTypeC.BISHOP] | this.byTypeBB[PieceTypeC.QUEEN]);
 
-          Bitboard b = stmAttackers & this.byTypeBB[Pt];
-          occupied ^= b & ~(b - 1);
+                if (Pt == PieceTypeC.ROOK || Pt == PieceTypeC.QUEEN)
+                    attackers |= Utils.rook_attacks_bb(to, occupied) & (this.byTypeBB[PieceTypeC.ROOK] | this.byTypeBB[PieceTypeC.QUEEN]);
 
-          if (Pt == PieceTypeC.PAWN || Pt == PieceTypeC.BISHOP || Pt == PieceTypeC.QUEEN)
-              attackers |= Utils.bishop_attacks_bb(to, occupied) & (this.byTypeBB[PieceTypeC.BISHOP] | this.byTypeBB[PieceTypeC.QUEEN]);
+                return Pt;
+            }
 
-          if (Pt == PieceTypeC.ROOK || Pt == PieceTypeC.QUEEN)
-              attackers |= Utils.rook_attacks_bb(to, occupied) & (this.byTypeBB[PieceTypeC.ROOK] | this.byTypeBB[PieceTypeC.QUEEN]);
-
-          return Pt;
+            return this.next_attacker(Pt + 1, to, stmAttackers, ref occupied, ref attackers);
         }
 
         /// clear() erases the position object to a pristine state, with an
