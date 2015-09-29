@@ -217,30 +217,11 @@ namespace Portfish
             return Slidings[p];
         }
 
-        // Maximum depth for razoring
-        private const int RazorDepth = 4 * DepthC.ONE_PLY;
-
         // Dynamic razoring margin based on depth
         internal static int razor_margin(int d)
         {
             return (0x200 + 0x10 * d);
         }
-
-        // Maximum depth for use of dynamic threat detection when null move fails low
-        internal const int ThreatDepth = 5 * DepthC.ONE_PLY;
-
-        // Minimum depth for use of internal iterative deepening
-        internal static readonly int[] IIDDepth = { 8 * DepthC.ONE_PLY, 5 * DepthC.ONE_PLY };
-
-        // At Non-PV nodes we do an internal iterative deepening search
-        // when the static evaluation is bigger then beta - IIDMargin.
-        internal const int IIDMargin = (0x100);
-
-        // Minimum depth for use of singular extension
-        internal static readonly int[] SingularExtensionDepth = { 8 * DepthC.ONE_PLY, 6 * DepthC.ONE_PLY };
-
-        // Futility margin for quiescence search
-        internal const int FutilityMarginQS = (0x80);
 
         // Futility lookup tables (initialized at startup) and their access functions
         internal static readonly int[][] FutilityMargins = new int[16][]; // [depth][moveNumber] 16, 64
@@ -924,7 +905,7 @@ namespace Portfish
             }
 
             // Step 6. Razoring (is omitted in PV nodes)
-            if (!PvNode && !inCheck && depth < RazorDepth && refinedValue + razor_margin(depth) < beta
+            if (!PvNode && !inCheck && depth < 4 * DepthC.ONE_PLY && refinedValue + razor_margin(depth) < beta
                 && ttMove == MoveC.MOVE_NONE && Math.Abs(beta) < ValueC.VALUE_MATE_IN_MAX_PLY
                 && !pos.pawn_on_7th(pos.sideToMove))
             {
@@ -942,7 +923,7 @@ namespace Portfish
             // Step 7. Static null move pruning (is omitted in PV nodes)
             // We're betting that the opponent doesn't have a move that will reduce
             // the score by more than futility_margin(depth) if we do a null move.
-            if (!PvNode && !inCheck && (ss[ssPos].skipNullMove == 0) && depth < RazorDepth
+            if (!PvNode && !inCheck && (ss[ssPos].skipNullMove == 0) && depth < 4 * DepthC.ONE_PLY
                 && Math.Abs(beta) < ValueC.VALUE_MATE_IN_MAX_PLY && refinedValue - futility_margin(depth, 0) >= beta
                 && (pos.non_pawn_material(pos.sideToMove) != 0))
             {
@@ -1023,7 +1004,7 @@ namespace Portfish
                     // parent node, which will trigger a re-search with full depth).
                     threatMove = ss[ssPos + 1].currentMove;
 
-                    if (depth < ThreatDepth && (ss[ssPos - 1].reduction != 0) && threatMove != MoveC.MOVE_NONE
+                    if (depth < 5 * DepthC.ONE_PLY && (ss[ssPos - 1].reduction != 0) && threatMove != MoveC.MOVE_NONE
                         && connected_moves(pos, ss[ssPos - 1].currentMove, threatMove))
                     {
                         if (st != null)
@@ -1041,7 +1022,7 @@ namespace Portfish
             // If we have a very good capture (i.e. SEE > seeValues[captured_piece_type])
             // and a reduced search returns a value much above beta, we can (almost) safely
             // prune the previous move.
-            if (!PvNode && !inCheck && excludedMove == MoveC.MOVE_NONE && depth >= RazorDepth + DepthC.ONE_PLY
+            if (!PvNode && !inCheck && excludedMove == MoveC.MOVE_NONE && depth >= 4 * DepthC.ONE_PLY + DepthC.ONE_PLY
                 && (ss[ssPos].skipNullMove == 0) && Math.Abs(beta) < ValueC.VALUE_MATE_IN_MAX_PLY)
             {
                 var rbeta = beta + 200;
@@ -1088,8 +1069,8 @@ namespace Portfish
             }
 
             // Step 10. Internal iterative deepening
-            if (ttMove == MoveC.MOVE_NONE && depth >= IIDDepth[PvNode ? 1 : 0]
-                && (PvNode || (!inCheck && ss[ssPos].eval + IIDMargin >= beta)))
+            if (ttMove == MoveC.MOVE_NONE && depth >= (PvNode ? 5 * DepthC.ONE_PLY : 8 * DepthC.ONE_PLY)
+                && (PvNode || (!inCheck && ss[ssPos].eval + 256 >= beta)))
             {
                 var d = (PvNode ? depth - 2 * DepthC.ONE_PLY : depth / 2);
 
@@ -1124,7 +1105,7 @@ namespace Portfish
             ci.CreateCheckInfo(pos);
             
             value = bestValue; // Workaround a bogus 'uninitialized' warning under gcc
-            singularExtensionNode = !RootNode && !SpNode && depth >= SingularExtensionDepth[PvNode ? 1 : 0]
+            singularExtensionNode = !RootNode && !SpNode && depth >= (PvNode ? 6 * DepthC.ONE_PLY : 8 * DepthC.ONE_PLY)
                                     && ttMove != MoveC.MOVE_NONE && (excludedMove == 0)
                                     // Recursive singular search is not allowed
                                     && ((tte.type() & Bound.BOUND_LOWER) != 0) // FIXME: uninitialized!
@@ -1591,7 +1572,7 @@ namespace Portfish
                     alpha = bestValue;
                 }
 
-                futilityBase = ss[ssPos].eval + evalMargin + FutilityMarginQS;
+                futilityBase = ss[ssPos].eval + evalMargin + 128;
                 enoughMaterial = (pos.sideToMove == 0 ? pos.st.npMaterialWHITE : pos.st.npMaterialBLACK)
                                  > Constants.RookValueMidgame;
             }
