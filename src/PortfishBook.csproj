@@ -76,10 +76,6 @@
     <OutputPath>Release_x64\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <!-- A reference to the entire .NET Framework is automatically included -->
-    <EmbeddedResource Include="book.bin" />
-  </ItemGroup>
-  <ItemGroup>
     <Compile Include="Properties\AssemblyInfoBook.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\Portable\$(TargetFrameworkVersion)\Microsoft.Portable.CSharp.targets" />
