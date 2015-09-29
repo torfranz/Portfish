@@ -442,11 +442,11 @@ namespace Portfish
         // Offsets to the PolyGlotRandoms[] array of zobrist keys
         private const int ZobPieceOffset = 0;
 
-        private const int ZobCastleOffset = 768;
+        private const int ZobCastleOffset = ZobPieceOffset + 12 * 64; // Pieces * squares;
 
-        private const int ZobEnPassantOffset = 772;
+        private const int ZobEnPassantOffset = ZobCastleOffset + 4;       // Castle flags
 
-        private const int ZobTurnOffset = 780;
+        private const int ZobTurnOffset = ZobEnPassantOffset + 8;       // Number of files
 
         private const long SIZE_OF_BOOKENTRY = 16;
 
@@ -491,7 +491,7 @@ namespace Portfish
                 UInt64 size = (UInt64)(fs.Length / SIZE_OF_BOOKENTRY);
                 using (BinaryReader br = new BinaryReader(fs))
                 {
-                    binary_search(key, size, br);
+                    find_first(key, size, br);
                     while (Read(ref e, br) && (e.key == key))
                     {
                         best = Math.Max(best, e.count);
@@ -531,7 +531,7 @@ namespace Portfish
                     UInt64 size = (UInt64)(fs.Length / SIZE_OF_BOOKENTRY);
                     using (BinaryReader br = new BinaryReader(fs))
                     {
-                        binary_search(key, size, br);
+                        find_first(key, size, br);
                         while (Read(ref e, br) && (e.key == key))
                         {
                             best = Math.Max(best, e.count);
@@ -577,7 +577,7 @@ namespace Portfish
                 var size = (ulong)(fs.Length / SIZE_OF_BOOKENTRY);
                 using (var br = new BinaryReader(fs))
                 {
-                    binary_search(key, size, br);
+                    find_first(key, size, br);
                     while (Read(ref e, br) && (e.key == key))
                     {
                         best = Math.Max(best, e.count);
@@ -671,8 +671,8 @@ namespace Portfish
                 // BP = 0, WP = 1, BN = 2, WN = 3, ... BK = 10, WK = 11
                 var s = Utils.pop_lsb(ref b);
                 var p = pos.piece_on(s);
-                var polyPiece = 2 * (Utils.type_of(p) - 1) + (Utils.color_of(p) == ColorC.WHITE ? 1 : 0);
-                key ^= PolyGlotRandoms[ZobPieceOffset + (64 * polyPiece + s)];
+                var pieceOfs = 2 * (Utils.type_of(p) - 1) + (Utils.color_of(p) == ColorC.WHITE ? 1 : 0);
+                key ^= PolyGlotRandoms[ZobPieceOffset + (64 * pieceOfs  + s)];
             }
 
             b = (ulong)pos.can_castle_CR(CastleRightC.ALL_CASTLES);
@@ -695,10 +695,10 @@ namespace Portfish
             return key;
         }
 
-        /// Book::binary_search() takes a book key as input, and does a binary search
+        /// Book::find_first() takes a book key as input, and does a binary search
         /// through the book file for the given key. File stream current position is set
         /// to the leftmost book entry with the same key as the input.
-        private static void binary_search(ulong key, ulong size, BinaryReader br)
+        private static Key find_first(ulong key, ulong size, BinaryReader br)
         {
             ulong low, high, mid;
             var e = new BookEntry();
@@ -730,6 +730,8 @@ namespace Portfish
             Debug.Assert(low == high);
 
             br.BaseStream.Seek((long)(low * SIZE_OF_BOOKENTRY), SeekOrigin.Begin);
+
+            return low;
         }
     }
 }
