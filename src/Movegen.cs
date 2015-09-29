@@ -284,40 +284,61 @@ namespace Portfish
             }
         }
 
-        private static void generate_direct_checks(
+        private static void generate_moves(
             int Pt,
+            bool onlyChecks,
             Position pos,
-            MoveStack[] ms,
+            MoveStack[] mlist,
             ref int mpos,
             int us,
+            ulong target,
             CheckInfo ci)
         {
             Debug.Assert(Pt != PieceTypeC.KING && Pt != PieceTypeC.PAWN);
 
-            ulong b;
+            // specialization for KING, false
+            if (Pt == PieceTypeC.KING && !onlyChecks)
+            {
+                Square from = pos.king_square(us);
+                Bitboard b = Position.attacks_from_KING(from) & (ulong)target;
+                // SERIALIZE(b);
+                while (b != 0)
+                {
+                    mlist[mpos++].move = Utils.make_move(from, Utils.pop_lsb(ref b));
+                }
+                return;
+            }
 
             var pl = pos.pieceList[us][Pt];
             var plPos = 0;
             
             for (var from = pl[plPos]; from != SquareC.SQ_NONE; from = pl[++plPos])
             {
-                var target = ci.checkSq[Pt] & ~pos.occupied_squares; // Non capture checks only
-
-                if ((Pt == PieceTypeC.BISHOP || Pt == PieceTypeC.ROOK || Pt == PieceTypeC.QUEEN)
-                        && ((Utils.PseudoAttacks[Pt][from] & target) == 0))
+                if (onlyChecks)
                 {
-                    continue;
+                    if ((Pt == PieceTypeC.BISHOP || Pt == PieceTypeC.ROOK || Pt == PieceTypeC.QUEEN)
+                        && ((Utils.PseudoAttacks[Pt][from] & (ulong)target & ci.checkSq[Pt]) == 0))
+                    {
+                        continue;
+                    }
+
+                    if ((ci.dcCandidates != 0) && (Utils.bit_is_set(ci.dcCandidates, from) != 0))
+                    {
+                        continue;
+                    }
                 }
 
-                if ((ci.dcCandidates != 0) && (Utils.bit_is_set(ci.dcCandidates, from) != 0))
+                var b = pos.attacks_from_PTS(Pt, from) & (ulong)target;
+
+                if (onlyChecks)
                 {
-                    continue;
+                    b &= ci.checkSq[Pt];
                 }
 
-                b = pos.attacks_from_PTS(Pt, from) & target;
+                // SERIALIZE(b);
                 while (b != 0)
                 {
-                    ms[mpos++].move = Utils.make_move(from, Utils.pop_lsb(ref b));
+                    mlist[mpos++].move = Utils.make_move(from, Utils.pop_lsb(ref b));
                 }
             }
         }
@@ -331,61 +352,10 @@ namespace Portfish
 #if X64
                 Bitboard bb = b;
                 b &= (b - 1);
-                ms[mpos++].move = ((Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * 0x218A392CD3D5DBFUL) >> 58]) | (from << 6));
+                mlist[mpos++].move = ((Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * 0x218A392CD3D5DBFUL) >> 58]) | (from << 6));
 #else
                 ms[mpos++].move = Utils.make_move(from, Utils.pop_lsb(ref b));
 #endif
-            }
-        }
-
-        private static void generate_moves(Position pos, bool OnlyChecks, MoveStack[] ms, ref int mpos, int us, ulong target)
-        {
-            ulong b;
-            
-            for (var pieceType = PieceTypeC.KNIGHT; pieceType < PieceTypeC.KING; pieceType++)
-            {
-                var pl = pos.pieceList[us][pieceType];
-
-                var plPos = 0;
-                for (var from = pl[plPos]; from != SquareC.SQ_NONE; from = pl[++plPos])
-                {
-#if X64
-                    if (pieceType == PieceTypeC.BISHOP) { b = Utils.BAttacks[from][(((pos.occupied_squares & Utils.BMasks[from]) * Utils.BMagics[from]) >> Utils.BShifts[from])] & target; }
-                    else if (pieceType == PieceTypeC.ROOK) { b = Utils.RAttacks[from][(((pos.occupied_squares & Utils.RMasks[from]) * Utils.RMagics[from]) >> Utils.RShifts[from])] & target; }
-                    else if (pieceType == PieceTypeC.QUEEN) { b = (Utils.BAttacks[from][(((pos.occupied_squares & Utils.BMasks[from]) * Utils.BMagics[from]) >> Utils.BShifts[from])] | Utils.RAttacks[from][(((pos.occupied_squares & Utils.RMasks[from]) * Utils.RMagics[from]) >> Utils.RShifts[from])]) & target; }
-                    else b = Utils.StepAttacksBB[pieceType][from] & target;
-
-                    while (b != 0) 
-                    {
-                        Bitboard bb = b;
-                        b &= (b - 1);
-                        ms[mpos++].move = (Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * 0x218A392CD3D5DBFUL) >> 58]) | (from << 6);
-                    }
-#else
-                    if (pieceType == PieceTypeC.BISHOP)
-                    {
-                        b = Utils.bishop_attacks_bb(from, pos.occupied_squares) & target;
-                    }
-                    else if (pieceType == PieceTypeC.ROOK)
-                    {
-                        b = Utils.rook_attacks_bb(from, pos.occupied_squares) & target;
-                    }
-                    else if (pieceType == PieceTypeC.QUEEN)
-                    {
-                        b = (Utils.bishop_attacks_bb(from, pos.occupied_squares)
-                                | Utils.rook_attacks_bb(from, pos.occupied_squares)) & target;
-                    }
-                    else
-                    {
-                        b = Utils.StepAttacksBB[pieceType][from] & target;
-                    }
-
-                    while (b != 0)
-                    {
-                        ms[mpos++].move = Utils.make_move(from, Utils.pop_lsb(ref b));
-                    }
-#endif
-                }
             }
         }
 
@@ -495,7 +465,10 @@ namespace Portfish
             // Blocking evasions or captures of the checking piece
             var target = Utils.between_bb(checksq, ksq) | checkers;
             generate_pawn_moves(us, GenType.EVASIONS, pos, ms, ref mpos, target, SquareC.SQ_NONE);
-            generate_moves(pos, ms, ref mpos, us, target);
+            generate_moves(PieceTypeC.KNIGHT, false, pos, ms, ref mpos, us, target, null);
+            generate_moves(PieceTypeC.BISHOP, false, pos, ms, ref mpos, us, target, null);
+            generate_moves(PieceTypeC.ROOK, false, pos, ms, ref mpos, us, target, null);
+            generate_moves(PieceTypeC.QUEEN, false, pos, ms, ref mpos, us, target, null);
         }
 
         internal static void generate_quiet_check(Position pos, MoveStack[] ms, ref int mpos)
@@ -507,6 +480,7 @@ namespace Portfish
             var us = pos.sideToMove;
             var ci = CheckInfoBroker.GetObject();
             ci.CreateCheckInfo(pos);
+            var target = ~pos.occupied_squares;
             var dc = ci.dcCandidates;
 
             while (dc != 0)
@@ -534,11 +508,11 @@ namespace Portfish
 
             generate_pawn_moves(us, GenType.QUIET_CHECKS, pos, ms, ref mpos, ci.dcCandidates, ci.ksq);
 
-            generate_direct_checks(PieceTypeC.KNIGHT, pos, ms, ref mpos, us, ci);
-            generate_direct_checks(PieceTypeC.BISHOP, pos, ms, ref mpos, us, ci);
-            generate_direct_checks(PieceTypeC.ROOK, pos, ms, ref mpos, us, ci);
-            generate_direct_checks(PieceTypeC.QUEEN, pos, ms, ref mpos, us, ci);
-
+            generate_moves(PieceTypeC.KNIGHT, true, pos, ms, ref mpos, us, target, ci);
+            generate_moves(PieceTypeC.BISHOP, true, pos, ms, ref mpos, us, target, ci);
+            generate_moves(PieceTypeC.ROOK, true, pos, ms, ref mpos, us, target, ci);
+            generate_moves(PieceTypeC.QUEEN, true, pos, ms, ref mpos, us, target, ci);
+            
             if (pos.can_castle_C(us) != 0)
             {
                 generate_castle(CastlingSideC.KING_SIDE, true, pos, ms, ref mpos, us);
@@ -556,7 +530,10 @@ namespace Portfish
             var target = ~pos.occupied_squares;
 
             generate_pawn_moves(us, GenType.QUIETS, pos, ms, ref mpos, target, SquareC.SQ_NONE);
-            generate_moves(pos, ms, ref mpos, us, target);
+            generate_moves(PieceTypeC.KNIGHT, false, pos, ms, ref mpos, us, target, null);
+            generate_moves(PieceTypeC.BISHOP, false, pos, ms, ref mpos, us, target, null);
+            generate_moves(PieceTypeC.ROOK, false, pos, ms, ref mpos, us, target, null);
+            generate_moves(PieceTypeC.QUEEN, false, pos, ms, ref mpos, us, target, null);
             generate_king_moves(pos, ms, ref mpos, us, target);
 
             if ((pos.st.castleRights & (CastleRightC.WHITE_ANY << (us << 1))) != 0)
@@ -574,7 +551,10 @@ namespace Portfish
             var target = ~(pos.byColorBB[us]);
 
             generate_pawn_moves(us, GenType.NON_EVASIONS, pos, ms, ref mpos, target, SquareC.SQ_NONE);
-            generate_moves(pos, ms, ref mpos, us, target);
+            generate_moves(PieceTypeC.KNIGHT, false, pos, ms, ref mpos, us, target, null);
+            generate_moves(PieceTypeC.BISHOP, false, pos, ms, ref mpos, us, target, null);
+            generate_moves(PieceTypeC.ROOK, false, pos, ms, ref mpos, us, target, null);
+            generate_moves(PieceTypeC.QUEEN, false, pos, ms, ref mpos, us, target, null);
             generate_king_moves(pos, ms, ref mpos, us, target);
 
             if ((pos.st.castleRights & (CastleRightC.WHITE_ANY << (us << 1))) != 0)
@@ -592,7 +572,10 @@ namespace Portfish
             var target = pos.byColorBB[us ^ 1];
 
             generate_pawn_moves(us, GenType.CAPTURES, pos, ms, ref mpos, target, SquareC.SQ_NONE);
-            generate_moves(pos, ms, ref mpos, us, target);
+            generate_moves(PieceTypeC.KNIGHT, false, pos, ms, ref mpos, us, target, null);
+            generate_moves(PieceTypeC.BISHOP, false, pos, ms, ref mpos, us, target, null);
+            generate_moves(PieceTypeC.ROOK, false, pos, ms, ref mpos, us, target, null);
+            generate_moves(PieceTypeC.QUEEN, false, pos, ms, ref mpos, us, target, null);
             generate_king_moves(pos, ms, ref mpos, us, target);
         }
     }
