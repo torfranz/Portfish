@@ -26,7 +26,8 @@ namespace Portfish
 
     /// The Stack struct keeps track of the information we need to remember from
     /// nodes shallower and deeper in the tree during the search. Each search thread
-    /// has its own array of Stack objects, indexed by the current ply.
+    /// has its own array of Stack objects, indexed by the current ply.Start with a small aspiration window and, in case of fail high/low,
+             // research with bigger wind
     internal struct Stack
     {
         internal SplitPoint sp;
@@ -591,7 +592,7 @@ namespace Portfish
 
                     // Start with a small aspiration window and, in case of fail high/low,
                     // research with bigger window until not failing high/low anymore.
-                    do
+                    while(true)
                     {
                         // Search starts from ss+1 to allow referencing (ss-1). This is
                         // needed by update gains and ss copy when splitting at Root.
@@ -657,9 +658,15 @@ namespace Portfish
                             break;
                         }
 
+                        // Search with full window in case we have a win/mate score
+                        if (Math.Abs(bestValue) >= ValueC.VALUE_KNOWN_WIN)
+                        {
+                            alpha = -ValueC.VALUE_INFINITE;
+                            beta = ValueC.VALUE_INFINITE;
+                        }
+
                         Debug.Assert(alpha >= -ValueC.VALUE_INFINITE && beta <= ValueC.VALUE_INFINITE);
                     }
-                    while (Math.Abs(bestValue) < ValueC.VALUE_KNOWN_WIN);
                 }
 
                 // Skills: Do we need to pick now the best move ?
