@@ -773,7 +773,7 @@ namespace Portfish
             var RootNode = (NT == NodeTypeC.Root || NT == NodeTypeC.SplitPointRoot);
 
             Debug.Assert(alpha >= -ValueC.VALUE_INFINITE && alpha < beta && beta <= ValueC.VALUE_INFINITE);
-            Debug.Assert((alpha == beta - 1) || PvNode);
+            Debug.Assert((PvNode || alpha == beta - 1));
             Debug.Assert(depth > DepthC.DEPTH_ZERO);
 
             var ms = MovesSearchedBroker.GetObject();
@@ -788,7 +788,7 @@ namespace Portfish
             int ext, newDepth;
             Bound bt;
             int bestValue, value, oldAlpha, ttValue;
-            int refinedValue, nullValue, futilityBase, futilityValue;
+            int refinedValue, nullValue, futilityValue;
             bool pvMove, inCheck, singularExtensionNode, givesCheck;
             bool captureOrPromotion, dangerous, doFullDepthSearch;
             int moveCount = 0, playedMoveCount = 0;
@@ -810,7 +810,7 @@ namespace Portfish
             if (SpNode)
             {
                 ttMove = excludedMove = MoveC.MOVE_NONE;
-                ttValue = ValueC.VALUE_ZERO;
+                ttValue = ValueC.VALUE_NONE;
 
                 sp = ss[ssPos].sp;
                 bestMove = sp.bestMove;
@@ -818,36 +818,40 @@ namespace Portfish
                 bestValue = sp.bestValue;
                 moveCount = sp.moveCount; // Lock must be held here
 
-                Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && moveCount > 0);
+                Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && sp.moveCount > 0);
 
                 goto split_point_start;
             }
-            ss[ssPos].currentMove = threatMove = ss[ssPos + 1].excludedMove = bestMove = MoveC.MOVE_NONE;
-            ss[ssPos + 1].skipNullMove = 0;
-            ss[ssPos + 1].reduction = DepthC.DEPTH_ZERO;
-            ss[ssPos + 2].killers0 = ss[ssPos + 2].killers1 = MoveC.MOVE_NONE;
-
-            // Step 2. Check for aborted search and immediate draw
+            else
+            {
+                bestValue = -ValueC.VALUE_INFINITE;
+                ss[ssPos].currentMove = threatMove = ss[ssPos + 1].excludedMove = bestMove = MoveC.MOVE_NONE;
+                ss[ssPos + 1].skipNullMove = 0;
+                ss[ssPos + 1].reduction = DepthC.DEPTH_ZERO;
+                ss[ssPos + 2].killers0 = ss[ssPos + 2].killers1 = MoveC.MOVE_NONE;
+            }
+            
             // Enforce node limit here. FIXME: This only works with 1 search thread.
             if ((Limits.nodes != 0) && pos.nodes >= Limits.nodes)
             {
                 SignalsStop = true;
             }
 
-            if ((SignalsStop || pos.is_draw(false) || ss[ssPos].ply > Constants.MAX_PLY) && !RootNode)
-            {
-                MovesSearchedBroker.Free();
-                return ValueC.VALUE_DRAW;
-            }
-
-            // Step 3. Mate distance pruning. Even if we mate at the next move our score
-            // would be at best mate_in(ss[ssPos].ply+1), but if alpha is already bigger because
-            // a shorter mate was found upward in the tree then there is no need to search
-            // further, we will never beat current alpha. Same logic but with reversed signs
-            // applies also in the opposite condition of being mated instead of giving mate,
-            // in this case return a fail-high score.
             if (!RootNode)
             {
+                // Step 2. Check for aborted search and immediate draw
+                if ((SignalsStop || pos.is_draw(false) || ss[ssPos].ply > Constants.MAX_PLY))
+                {
+                    MovesSearchedBroker.Free();
+                    return ValueC.VALUE_DRAW;
+                }
+
+                // Step 3. Mate distance pruning. Even if we mate at the next move our score
+                // would be at best mate_in(ss->ply+1), but if alpha is already bigger because
+                // a shorter mate was found upward in the tree then there is no need to search
+                // further, we will never beat current alpha. Same logic but with reversed signs
+                // applies also in the opposite condition of being mated instead of giving mate,
+                // in this case return a fail-high score.
                 alpha = Math.Max(Utils.mated_in(ss[ssPos].ply), alpha);
                 beta = Math.Min(Utils.mate_in(ss[ssPos].ply + 1), beta);
                 if (alpha >= beta)
@@ -864,7 +868,7 @@ namespace Portfish
             posKey = (excludedMove != 0) ? pos.exclusion_key() : pos.key();
             tteHasValue = TT.probe(posKey, ref ttePos, out tte);
             ttMove = RootNode ? RootMoves[PVIdx].pv[0] : tteHasValue ? tte.move() : MoveC.MOVE_NONE;
-            ttValue = tteHasValue ? value_from_tt(tte.value(), ss[ssPos].ply) : ValueC.VALUE_ZERO;
+            ttValue = tteHasValue ? value_from_tt(tte.value(), ss[ssPos].ply) : ValueC.VALUE_NONE;
 
             // At PV nodes we check for exact scores, while at non-PV nodes we check for
             // a fail high/low. Biggest advantage at probing at PV nodes is to have a
@@ -892,7 +896,7 @@ namespace Portfish
             // Step 5. Evaluate the position statically and update parent's gain statistics
             if (inCheck)
             {
-                ss[ssPos].eval = ss[ssPos].evalMargin = ValueC.VALUE_NONE;
+                ss[ssPos].eval = ss[ssPos].evalMargin = refinedValue = ValueC.VALUE_NONE;
             }
             else if (tteHasValue)
             {
@@ -1122,7 +1126,8 @@ namespace Portfish
                 SpNode ? ss[ssPos].sp.mp : null);
             var ci = CheckInfoBroker.GetObject();
             ci.CreateCheckInfo(pos);
-            futilityBase = ss[ssPos].eval + ss[ssPos].evalMargin;
+            
+            value = bestValue; // Workaround a bogus 'uninitialized' warning under gcc
             singularExtensionNode = !RootNode && !SpNode && depth >= SingularExtensionDepth[PvNode ? 1 : 0]
                                     && ttMove != MoveC.MOVE_NONE && (excludedMove == 0)
                                     // Recursive singular search is not allowed
@@ -1243,7 +1248,7 @@ namespace Portfish
                     // We illogically ignore reduction condition depth >= 3*ONE_PLY for predicted depth,
                     // but fixing this made program slightly weaker.
                     var predictedDepth = newDepth - reduction(PvNode, depth, moveCount);
-                    futilityValue = futilityBase + futility_margin(predictedDepth, moveCount)
+                    futilityValue = ss[ssPos].eval + ss[ssPos].evalMargin + futility_margin(predictedDepth, moveCount)
                                     + H.gain(pos.piece_moved(move), Utils.to_sq(move));
 
                     if (futilityValue < beta)
@@ -1275,7 +1280,7 @@ namespace Portfish
                     continue;
                 }
 
-                pvMove = (PvNode && moveCount <= 1);
+                pvMove = (PvNode && moveCount == 1);
                 ss[ssPos].currentMove = move;
                 if (!SpNode && !captureOrPromotion && playedMoveCount < 64)
                 {
