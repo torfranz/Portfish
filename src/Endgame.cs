@@ -743,7 +743,7 @@ namespace Portfish
             {
                 // Does the defending king block the pawns?
                 if (Utils.square_distance(ksq, Utils.relative_square(strongerSide, SquareC.SQ_A8)) <= 1
-                    || (Utils.file_of(ksq) == FileC.FILE_A && ((Utils.in_front_bb_CS(strongerSide, ksq)) & pawns) == 0))
+                    || (Utils.file_of(ksq) == FileC.FILE_A && ((Utils.in_front_bb_CS(strongerSide, ksq) & pawns) == 0)))
                 {
                     return ScaleFactorC.SCALE_FACTOR_DRAW;
                 }
@@ -753,7 +753,7 @@ namespace Portfish
             {
                 // Does the defending king block the pawns?
                 if (Utils.square_distance(ksq, Utils.relative_square(strongerSide, SquareC.SQ_H8)) <= 1
-                    || (Utils.file_of(ksq) == FileC.FILE_H && ((Utils.in_front_bb_CS(strongerSide, ksq)) & pawns) == 0))
+                    || (Utils.file_of(ksq) == FileC.FILE_H && ((Utils.in_front_bb_CS(strongerSide, ksq) & pawns) == 0)))
                 {
                     return ScaleFactorC.SCALE_FACTOR_DRAW;
                 }
