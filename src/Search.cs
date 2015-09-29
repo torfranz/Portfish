@@ -260,10 +260,6 @@ namespace Portfish
             return Reductions[PvNode ? 1 : 0][Math.Min((d) / DepthC.ONE_PLY, 63)][Math.Min(mn, 63)];
         }
 
-        // Easy move margin. An easy move candidate must be at least this much
-        // better than the second best move.
-        private const int EasyMoveMargin = (0x150);
-
         // This is the minimum interval in msec between two check_time() calls
         private const int TimerResolution = 5;
 
@@ -690,7 +686,7 @@ namespace Portfish
                         && ((bestMoveNeverChanged && (pos.captured_piece_type() != 0))
                             || SearchTime.ElapsedMilliseconds > (TimeMgr.available_time() * 40) / 100))
                     {
-                        var rBeta = bestValue - EasyMoveMargin;
+                        var rBeta = bestValue - 2 * Constants.PawnValueMidgame;
                         ss[ssPos + 1].excludedMove = RootMoves[0].pv[0];
                         ss[ssPos + 1].skipNullMove = 1;
                         var v = search(
@@ -2006,7 +2002,7 @@ namespace Portfish
                 var s = RootMoves[i].score;
 
                 // Don't allow crazy blunders even at very low skills
-                if (i > 0 && RootMoves[i - 1].score > s + EasyMoveMargin)
+                if (i > 0 && RootMoves[i - 1].score > s + 2 * Constants.PawnValueMidgame)
                 {
                     break;
                 }
