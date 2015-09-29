@@ -477,10 +477,10 @@ namespace Portfish
 
             if ((bool.Parse(OptionMap.Instance["OwnBook"].v)) && (Limits.infinite == 0))
             {
-                var bookMove = Book.probe(
+                var bookMove = PolyglotBook.probe(
                     pos,
-                    OptionMap.Instance["Book File"].v,
-                    bool.Parse(OptionMap.Instance["Best Book Move"].v));
+                    OptionMap.Instance["PolyglotBook File"].v,
+                    bool.Parse(OptionMap.Instance["Best PolyglotBook Move"].v));
                 if ((bookMove != 0) && Utils.existRootMove(RootMoves, bookMove))
                 {
                     var bestpos = find(RootMoves, 0, RootMoves.Count, bookMove);

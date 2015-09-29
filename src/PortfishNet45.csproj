@@ -93,7 +93,7 @@
     <Compile Include="Benchmark.cs" />
     <Compile Include="Bitbase.cs" />
     <Compile Include="Bitcount.cs" />
-    <Compile Include="Book.cs" />
+    <Compile Include="PolyglotBook.cs" />
     <Compile Include="Constants.cs" />
     <Compile Include="Endgame.cs" />
     <Compile Include="Engine.cs" />

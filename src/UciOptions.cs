@@ -115,8 +115,8 @@
             var msd = cpus < 8 ? 4 : 7;
 
             var idx = 0;
-            this.Add("Book File", new UCIOption(idx++, "book.bin", null));
-            this.Add("Best Book Move", new UCIOption(idx++, false, null));
+            this.Add("PolyglotBook File", new UCIOption(idx++, "book.bin", null));
+            this.Add("Best PolyglotBook Move", new UCIOption(idx++, false, null));
             this.Add("Mobility (Middle Game)", new UCIOption(idx++, 100, 0, 200, UCIOptionChanges.on_eval));
             this.Add("Mobility (Endgame)", new UCIOption(idx++, 100, 0, 200, UCIOptionChanges.on_eval));
             this.Add("Passed Pawns (Middle Game)", new UCIOption(idx++, 100, 0, 200, UCIOptionChanges.on_eval));

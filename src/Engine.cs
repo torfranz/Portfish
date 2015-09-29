@@ -24,7 +24,7 @@
             StateInfoBroker.init();
 
             Utils.init();
-            Book.init();
+            PolyglotBook.init();
             Zobrist.init();
             KPKPosition.init();
             Endgame.init();
