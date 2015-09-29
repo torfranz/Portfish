@@ -55,6 +55,8 @@ namespace Portfish
         // Shared data
         internal readonly object Lock = new object();
 
+        internal Position[] activePositions = new Position[Constants.MAX_THREADS];
+
         internal ulong slavesMask;
 
         internal long nodes;
@@ -372,6 +374,10 @@ namespace Portfish
 
                     ThreadHelper.lock_grab(sp.Lock);
 
+                    Debug.Assert(sp.activePositions[idx] == null);
+                    
+                    sp.activePositions[idx] = pos;
+
                     if (sp.nodeType == NodeTypeC.Root)
                     {
                         Search.search(NodeTypeC.SplitPointRoot, pos, ss, ssPos + 1, sp.alpha, sp.beta, sp.depth);
@@ -392,6 +398,7 @@ namespace Portfish
                     Debug.Assert(this.is_searching);
 
                     this.is_searching = false;
+                    sp.activePositions[idx] = null;
 #if ACTIVE_REPARENT
                     sp.allSlavesRunning = false;
 #endif
@@ -495,6 +502,11 @@ namespace Portfish
         internal static int size()
         {
             return threads.Count;
+        }
+
+        internal static Thread thread(int index)
+        {
+            return threads[index];
         }
 
         internal static Thread main_thread()
@@ -658,8 +670,8 @@ namespace Portfish
 
             var slavesCnt = 0;
 
-            ThreadHelper.lock_grab(sp.Lock);
             ThreadHelper.lock_grab(splitLock);
+            ThreadHelper.lock_grab(sp.Lock);
 
             for (var i = 0; i < size() && !Fake; ++i)
             {
@@ -683,9 +695,9 @@ namespace Portfish
 
             master.splitPointsCnt++;
 
-            ThreadHelper.lock_release(splitLock);
             ThreadHelper.lock_release(sp.Lock);
-
+            ThreadHelper.lock_release(splitLock);
+            
             // Everything is set up. The master thread enters the idle loop, from which
             // it will instantly launch a search, because its is_searching flag is set.
             // We pass the split point as a parameter to the idle loop, which means that
@@ -702,8 +714,8 @@ namespace Portfish
             // We have returned from the idle loop, which means that all threads are
             // finished. Note that setting is_searching and decreasing activeSplitPoints is
             // done under lock protection to avoid a race with Thread::is_available_to().
-            ThreadHelper.lock_grab(sp.Lock); // To protect sp->nodes
             ThreadHelper.lock_grab(splitLock);
+            ThreadHelper.lock_grab(sp.Lock); // To protect sp->nodes
 
             master.is_searching = true;
             master.splitPointsCnt--;
@@ -711,9 +723,9 @@ namespace Portfish
             pos.nodes += sp.nodes;
             bestMove = sp.bestMove;
 
-            ThreadHelper.lock_release(splitLock);
             ThreadHelper.lock_release(sp.Lock);
-
+            ThreadHelper.lock_release(splitLock);
+            
             return sp.bestValue;
         }
 

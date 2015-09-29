@@ -513,6 +513,10 @@ namespace Portfish
             {
                 Threads.set_timer(Math.Min(100, Math.Max(TimeMgr.available_time() / 16, TimerResolution)));
             }
+            else if (Limits.nodes != 0)
+            {
+                Threads.set_timer(2 * TimerResolution);
+            }
             else
             {
                 Threads.set_timer(100);
@@ -831,12 +835,6 @@ namespace Portfish
                 ss[ssPos + 2].killers0 = ss[ssPos + 2].killers1 = MoveC.MOVE_NONE;
             }
             
-            // Enforce node limit here. FIXME: This only works with 1 search thread.
-            if ((Limits.nodes != 0) && pos.nodes >= Limits.nodes)
-            {
-                SignalsStop = true;
-            }
-
             if (!RootNode)
             {
                 // Step 2. Check for aborted search and immediate draw
@@ -2096,13 +2094,47 @@ namespace Portfish
                 return;
             }
 
-            var e = SearchTime.ElapsedMilliseconds;
+            long nodes = 0;
+            if (Limits.nodes != 0)
+            {
+                ThreadHelper.lock_grab(Threads.splitLock);
 
-            var stillAtFirstMove = SignalsFirstRootMove && !SignalsFailedLowAtRoot && e > TimeMgr.available_time();
+                nodes = RootPosition.nodes;
+                
+                // Loop across all split points and sum accumulated SplitPoint nodes plus
+                // all the currently active slaves positions.
+                for (var i = 0; i < Threads.size(); i++)
+                {
+                    for (int j = 0; j < Threads.thread(i).splitPointsCnt; j++)
+                    {
+                        SplitPoint sp = Threads.thread(i).splitPoints[j];
 
-            var noMoreTime = e > TimeMgr.maximum_time() - 2 * TimerResolution || stillAtFirstMove;
+                        ThreadHelper.lock_grab(sp.Lock);
 
-            if ((Limits.use_time_management() && noMoreTime) || ((Limits.movetime != 0) && e >= Limits.movetime))
+                        nodes += sp.nodes;
+                        Bitboard sm = sp.slavesMask;
+                        while (sm != 0)
+                        {
+                            Position pos = sp.activePositions[Utils.pop_lsb(ref sm)];
+                            nodes += pos?.nodes ?? 0;
+                        }
+
+                        ThreadHelper.lock_release(sp.Lock);
+                    }
+                }
+
+                ThreadHelper.lock_release(Threads.splitLock);
+            }
+
+            var elapsed = SearchTime.ElapsedMilliseconds;
+
+            var stillAtFirstMove = SignalsFirstRootMove && !SignalsFailedLowAtRoot && elapsed > TimeMgr.available_time();
+
+            var noMoreTime = elapsed > TimeMgr.maximum_time() - 2 * TimerResolution || stillAtFirstMove;
+
+            if ((Limits.use_time_management() && noMoreTime)
+                || (Limits.movetime != 0 && elapsed >= Limits.movetime)
+                || (Limits.nodes != 0 && nodes >= Limits.nodes))
             {
                 SignalsStop = true;
             }
