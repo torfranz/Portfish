@@ -1581,23 +1581,28 @@ namespace Portfish
                 }
 
                 // Detect non-capture evasions that are candidate to be pruned
-                evasionPrunable = !PvNode && inCheck && bestValue > ValueC.VALUE_MATED_IN_MAX_PLY
-                                  && !(((pos.board[move & 0x3F] != PieceC.NO_PIECE)
-                                        && !((move & (3 << 14)) == (3 << 14))) || ((move & (3 << 14)) == (2 << 14)))
-                                  && ((pos.st.castleRights & (CastleRightC.WHITE_ANY << (pos.sideToMove << 1))) == 0);
-
+                evasionPrunable = !PvNode 
+                                    && inCheck 
+                                    && bestValue > ValueC.VALUE_MATED_IN_MAX_PLY
+                                    && !pos.is_capture(move)
+                                    && (pos.can_castle_C(pos.sideToMove) == 0);
+                
                 // Don't search moves with negative SEE values
-                if (!PvNode && move != ttMove && (!inCheck || evasionPrunable) && Utils.type_of_move(move) != MoveTypeC.PROMOTION
+                if (!PvNode 
+                    && move != ttMove 
+                    && (!inCheck || evasionPrunable) 
+                    && Utils.type_of_move(move) != MoveTypeC.PROMOTION
                     && pos.see(move, true) < 0)
                 {
                     continue;
                 }
 
                 // Don't search useless checks
-                if (!PvNode && !inCheck && givesCheck && move != ttMove
-                    && !(((move & (3 << 14)) != 0)
-                             ? ((move & (3 << 14)) != (3 << 14))
-                             : (pos.board[move & 0x3F] != PieceC.NO_PIECE))
+                if (!PvNode 
+                    && !inCheck 
+                    && givesCheck 
+                    && move != ttMove
+                    && !pos.is_capture_or_promotion(move)
                     && ss[ssPos].eval + Constants.PawnValueMidgame / 4 < beta
                     && !check_is_dangerous(pos, move, futilityBase, beta))
                 {
@@ -1637,7 +1642,9 @@ namespace Portfish
                         }
                         else // Fail high
                         {
-                            TT.store(posKey, value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, ttDepth, move, ss[ssPos].eval, ss[ssPos].evalMargin);
+                            TT.store(posKey, value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, 
+                                ttDepth, move, ss[ssPos].eval, ss[ssPos].evalMargin);
+
                             return value;
                         }
                     }
@@ -1659,8 +1666,8 @@ namespace Portfish
             }
 
             TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), 
-                PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
-                ttDepth, bestMove, ss[ssPos].eval, ss[ssPos].evalMargin);
+                    PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
+                    ttDepth, bestMove, ss[ssPos].eval, ss[ssPos].evalMargin);
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
 
