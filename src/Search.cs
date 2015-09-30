@@ -265,45 +265,6 @@ namespace Portfish
 
         private static readonly History H = new History();
 
-        // is_dangerous() checks whether a move belongs to some classes of known
-        // 'dangerous' moves so that we avoid to prune it.
-        private static bool is_dangerous(Position pos, int m, bool captureOrPromotion)
-        {
-            // Test for a pawn pushed to 7th or a passed pawn move
-            if ((pos.board[((m >> 6) & 0x3F)] & 7) == PieceTypeC.PAWN)
-            {
-                var c = pos.sideToMove;
-                if (Utils.relative_rank_CS(c, (m & 0x3F)) == RankC.RANK_7
-                    || (((pos.byTypeBB[PieceTypeC.PAWN] & pos.byColorBB[c ^ 1]) & Utils.PassedPawnMask[c][(m & 0x3F)])
-                        == 0))
-                {
-                    return true;
-                }
-            }
-
-            // Castle move?
-            if (Utils.type_of_move(m) == MoveTypeC.CASTLING)
-            {
-                return true;
-            }
-            
-            // Passed pawn move?
-            if (Utils.type_of(pos.piece_moved(m)) == PieceTypeC.PAWN && pos.pawn_is_passed(pos.sideToMove, Utils.to_sq(m)))
-            {
-                return true;
-            }
-
-            // Entering a pawn endgame?
-            if (captureOrPromotion && (pos.board[m & 0x3F] & 7) != PieceTypeC.PAWN && Utils.type_of_move(m) == MoveTypeC.NORMAL
-                && (pos.st.npMaterialWHITE + pos.st.npMaterialBLACK - Position.PieceValue[Constants.Midgame][pos.board[m & 0x3F]]
-                    == ValueC.VALUE_ZERO))
-            {
-                return true;
-            }
-
-            return false;
-        }
-
         internal static void init()
         {
             SearchTime.Start();
@@ -430,7 +391,7 @@ namespace Portfish
             //SearchTime.Restart();
             Evaluate.RootColor = pos.sideToMove;
             Evaluate.ValueDraw[Evaluate.RootColor] = ValueC.VALUE_DRAW - Evaluate.ContemptFactor;
-            Evaluate.ValueDraw[~Evaluate.RootColor] = ValueC.VALUE_DRAW + Evaluate.ContemptFactor;
+            Evaluate.ValueDraw[1 - Evaluate.RootColor] = ValueC.VALUE_DRAW + Evaluate.ContemptFactor;
             TimeMgr.init(Limits, pos.startpos_ply_counter(), pos.sideToMove);
             TT.new_search();
             H.clear();
@@ -1154,10 +1115,17 @@ namespace Portfish
                     }
                 }
 
+                ext = DepthC.DEPTH_ZERO;
                 captureOrPromotion = pos.is_capture_or_promotion(move);
                 givesCheck = pos.move_gives_check(move, ci);
-                dangerous = givesCheck || is_dangerous(pos, move, captureOrPromotion);
-                ext = DepthC.DEPTH_ZERO;
+                dangerous = givesCheck 
+                            || pos.is_passed_pawn_push(move)
+                            || Utils.type_of_move(move) == MoveTypeC.CASTLING
+                            || (captureOrPromotion // Entering a pawn endgame?
+                                    && Utils.type_of(pos.piece_on(Utils.to_sq(move))) != PieceTypeC.PAWN
+                                    && Utils.type_of_move(move) == MoveTypeC.NORMAL
+                                    && (pos.non_pawn_material(ColorC.WHITE) + pos.non_pawn_material(ColorC.BLACK) 
+                                        - Position.PieceValue[Constants.Midgame][pos.piece_on(Utils.to_sq(move))] == ValueC.VALUE_ZERO));
 
                 // Step 12. Extend checks and, in PV nodes, also dangerous moves
                 if (PvNode && dangerous)
