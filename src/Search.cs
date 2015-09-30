@@ -1162,7 +1162,7 @@ namespace Portfish
 
                 // Step 13. Futility pruning (is omitted in PV nodes)
                 if (!PvNode && !inCheck && !captureOrPromotion && !dangerous && move != ttMove
-                    && (bestValue > ValueC.VALUE_MATED_IN_MAX_PLY || bestValue == -ValueC.VALUE_INFINITE))
+                    && (bestValue > ValueC.VALUE_MATED_IN_MAX_PLY || (bestValue == -ValueC.VALUE_INFINITE && alpha > ValueC.VALUE_MATED_IN_MAX_PLY)))
                 {
                     // Move count based pruning
                     if (depth < 16 * DepthC.ONE_PLY
