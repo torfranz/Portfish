@@ -300,7 +300,7 @@ namespace Portfish
 #if X64
                 Bitboard bb = b;
                 b &= (b - 1);
-                mlist[mpos++].move = ((Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * 0x218A392CD3D5DBFUL) >> 58]) | (from << 6));
+                mlist[mpos++].move = ((Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * DeBruijn_64) >> 58]) | (from << 6));
 #else
                 mlist[mpos++].move = Utils.make_move(from, Utils.pop_lsb(ref b));
 #endif

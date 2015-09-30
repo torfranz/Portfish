@@ -129,6 +129,8 @@ namespace Portfish
         internal static readonly char[] _pieces = " PNBRQK".ToCharArray();
         internal static readonly char[] PieceToChar = " PNBRQK  pnbrqk".ToCharArray();
 
+        internal const ulong DeBruijn_64 = 0x3F79D71B4CB0A89UL;
+        internal const uint DeBruijn_32 = 0x783A9B23;
         #endregion
 
         #region Lookup init
@@ -212,21 +214,20 @@ namespace Portfish
                     }
                 }
             }
-#if X64
-            for (int i = 0; i < 64; i++)
-            {
-                BSFTable[((1UL << i) * 0x218A392CD3D5DBFUL) >> 58] = i;
-            }
-#else
+
             // Matt Taylor's folding trick for 32 bit systems
             for (var i = 0; i < 64; i++)
             {
                 var b = (1UL << i);
                 b ^= b - 1;
+#if X64
+                BSFTable[(b * DeBruijn_64) >> 58] = i;
+#else
                 b ^= b >> 32;
-                BSFTable[(uint)(b * 0x783A9B23) >> 26] = i;
-            }
+                BSFTable[(uint)(b * DeBruijn_32) >> 26] = i;
 #endif
+            }
+
 
             for (var c = ColorC.WHITE; c <= ColorC.BLACK; c++)
             {
@@ -544,11 +545,11 @@ namespace Portfish
 #if X64
             Bitboard bb = b;
             b &= (b - 1);
-            return (BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * 0x218A392CD3D5DBFUL) >> 58]);
+            return (BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * DeBruijn_64) >> 58]);
 #else
             var bb = b ^ (b - 1);
             b &= (b - 1);
-            return BSFTable[(((uint)((bb & 0xffffffff) ^ (bb >> 32))) * 0x783a9b23) >> 26];
+            return BSFTable[(((uint)((bb & 0xffffffff) ^ (bb >> 32))) * DeBruijn_32) >> 26];
 #endif
         }
 
@@ -559,10 +560,10 @@ namespace Portfish
         internal static int lsb(ulong b)
         {
 #if X64
-            return BSFTable[((b & (0xffffffffffffffff - b + 1)) * 0x218A392CD3D5DBFUL) >> 58];
+            return BSFTable[((b & (0xffffffffffffffff - b + 1)) * DeBruijn_64) >> 58];
 #else
             b ^= (b - 1);
-            return BSFTable[(((uint)((b & 0xffffffff) ^ (b >> 32))) * 0x783A9B23) >> 26];
+            return BSFTable[(((uint)((b & 0xffffffff) ^ (b >> 32))) * DeBruijn_32) >> 26];
 #endif
         }
 

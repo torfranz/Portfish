@@ -780,7 +780,7 @@ namespace Portfish
                         if (((b & (b - 1)) == 0) && ((b & pos.byColorBB[Them]) != 0))
                         {
 #if X64
-                            score += ThreatBonus[Piece][pos.board[Utils.BSFTable[((b & (0xffffffffffffffff - b + 1)) * 0x218A392CD3D5DBFUL) >> 58]] & 7];
+                            score += ThreatBonus[Piece][pos.board[Utils.BSFTable[((b & (0xffffffffffffffff - b + 1)) * DeBruijn_64) >> 58]] & 7];
 #else
                             score += ThreatBonus[Piece][pos.board[Utils.lsb(b)] & 7];
 #endif
@@ -1210,7 +1210,7 @@ namespace Portfish
 #if X64
                 Bitboard bb = b;
                 b &= (b - 1);
-                Square s = (Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * 0x218A392CD3D5DBFUL) >> 58]);
+                Square s = (Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * DeBruijn_64) >> 58]);
 #else
                 var s = Utils.pop_lsb(ref b);
 #endif
