@@ -762,7 +762,7 @@ namespace Portfish
             int ext, newDepth;
             int bestValue, value, ttValue;
             int refinedValue, nullValue, futilityValue;
-            bool pvMove, inCheck, singularExtensionNode, givesCheck;
+            bool inCheck, givesCheck, pvMove, singularExtensionNode;
             bool captureOrPromotion, dangerous, doFullDepthSearch;
             int moveCount = 0, playedMoveCount = 0;
             SplitPoint sp = null;
@@ -1354,7 +1354,7 @@ namespace Portfish
                         if (PvNode && value < beta)
                         {
                             alpha = value; // Update alpha here! Always alpha < beta
-                            if (SpNode) sp.alpha = alpha;
+                            if (SpNode) sp.alpha = value;
                         }
                         else // Fail high
                         {
@@ -1472,20 +1472,20 @@ namespace Portfish
 
             Debug.Assert(NT == NodeTypeC.PV || NT == NodeTypeC.NonPV);
             Debug.Assert(alpha >= -ValueC.VALUE_INFINITE && alpha < beta && beta <= ValueC.VALUE_INFINITE);
-            Debug.Assert((alpha == beta - 1) || PvNode);
+            Debug.Assert(PvNode || (alpha == beta - 1));
             Debug.Assert(depth <= DepthC.DEPTH_ZERO);
 
             StateInfo st = null;
             int ttMove, move, bestMove;
-            int ttValue, bestValue, value, evalMargin = 0, futilityValue, futilityBase;
+            int ttValue, bestValue, value, futilityValue, futilityBase;
 
             bool inCheck, enoughMaterial, givesCheck, evasionPrunable;
             var tteHasValue = false;
             TTEntry tte;
             uint ttePos = 0;
             int ttDepth;
-            Bound bt;
-            var oldAlpha = alpha;
+
+            inCheck = pos.in_check();
 
             ss[ssPos].currentMove = bestMove = MoveC.MOVE_NONE;
             ss[ssPos].ply = ss[ssPos - 1].ply + 1;
@@ -1496,18 +1496,17 @@ namespace Portfish
                 return Evaluate.ValueDraw[pos.sideToMove];
             }
 
-            // Decide whether or not to include checks, this fixes also the type of
-            // TT entry depth that we are going to use. Note that in qsearch we use
-            // only two types of depth in TT: DEPTH_QS_CHECKS or DEPTH_QS_NO_CHECKS.
-            inCheck = pos.st.checkersBB != 0;
-            ttDepth = (inCheck || depth >= DepthC.DEPTH_QS_CHECKS ? DepthC.DEPTH_QS_CHECKS : DepthC.DEPTH_QS_NO_CHECKS);
-
             // Transposition table lookup. At PV nodes, we don't use the TT for
             // pruning, but only for move ordering.
             tteHasValue = TT.probe(pos.key(), ref ttePos, out tte);
             ttMove = (tteHasValue ? tte.move() : MoveC.MOVE_NONE);
             ttValue = tteHasValue ? value_from_tt(tte.value(), ss[ssPos].ply) : ValueC.VALUE_ZERO;
 
+            // Decide whether or not to include checks, this fixes also the type of
+            // TT entry depth that we are going to use. Note that in qsearch we use
+            // only two types of depth in TT: DEPTH_QS_CHECKS or DEPTH_QS_NO_CHECKS.
+            ttDepth = (inCheck || depth >= DepthC.DEPTH_QS_CHECKS ? DepthC.DEPTH_QS_CHECKS : DepthC.DEPTH_QS_NO_CHECKS);
+            
             if (!PvNode && tteHasValue && can_return_tt(tte, ttDepth, ttValue, beta))
             {
                 ss[ssPos].currentMove = ttMove; // Can be MOVE_NONE
@@ -1517,8 +1516,8 @@ namespace Portfish
             // Evaluate the position statically
             if (inCheck)
             {
+                ss[ssPos].eval = ss[ssPos].evalMargin = ValueC.VALUE_NONE;
                 bestValue = futilityBase = -ValueC.VALUE_INFINITE;
-                ss[ssPos].eval = evalMargin = ValueC.VALUE_NONE;
                 enoughMaterial = false;
             }
             else
@@ -1526,12 +1525,12 @@ namespace Portfish
                 if (tteHasValue)
                 {
                     Debug.Assert(tte.static_value() != ValueC.VALUE_NONE);
-                    evalMargin = tte.static_value_margin();
                     ss[ssPos].eval = bestValue = tte.static_value();
+                    ss[ssPos].evalMargin = tte.static_value_margin();
                 }
                 else
                 {
-                    ss[ssPos].eval = bestValue = Evaluate.do_evaluate(false, pos, ref evalMargin);
+                    ss[ssPos].eval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                 }
 
                 // Stand pat. Return immediately if static value is at least beta
@@ -1546,7 +1545,7 @@ namespace Portfish
                             DepthC.DEPTH_NONE,
                             MoveC.MOVE_NONE,
                             ss[ssPos].eval,
-                            evalMargin);
+                            ss[ssPos].evalMargin);
                     }
 
                     return bestValue;
@@ -1557,7 +1556,7 @@ namespace Portfish
                     alpha = bestValue;
                 }
 
-                futilityBase = ss[ssPos].eval + evalMargin + 128;
+                futilityBase = ss[ssPos].eval + ss[ssPos].evalMargin + 128;
                 enoughMaterial = (pos.sideToMove == 0 ? pos.st.npMaterialWHITE : pos.st.npMaterialBLACK)
                                  > Constants.RookValueMidgame;
             }
@@ -1572,7 +1571,7 @@ namespace Portfish
             ci.CreateCheckInfo(pos);
 
             // Loop through the moves until no moves remain or a beta cutoff occurs
-            while (bestValue < beta && (move = mp.next_move()) != MoveC.MOVE_NONE)
+            while ((move = mp.next_move()) != MoveC.MOVE_NONE)
             {
                 Debug.Assert(Utils.is_ok_M(move));
 
@@ -1647,15 +1646,24 @@ namespace Portfish
 
                 Debug.Assert(value > -ValueC.VALUE_INFINITE && value < ValueC.VALUE_INFINITE);
 
-                // New best move?
+                // Check for new best move
                 if (value > bestValue)
                 {
                     bestValue = value;
                     bestMove = move;
 
-                    if (PvNode && value > alpha && value < beta) // We want always alpha < beta
+                    if (value > alpha)
                     {
-                        alpha = value;
+                        if (PvNode && value < beta) // Update alpha here! Always alpha < beta
+                        {
+                            alpha = value;
+                            bestMove = move;
+                        }
+                        else // Fail high
+                        {
+                            TT.store(pos.key(), value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, ttDepth, move, ss[ssPos].eval, ss[ssPos].evalMargin);
+                            return value;
+                        }
                     }
                 }
             }
@@ -1674,11 +1682,7 @@ namespace Portfish
                 return Utils.mated_in(ss[ssPos].ply); // Plies to mate from the root
             }
 
-            // Update transposition table
-            move = bestValue <= oldAlpha ? MoveC.MOVE_NONE : bestMove;
-            bt = bestValue <= oldAlpha ? Bound.BOUND_UPPER : bestValue >= beta ? Bound.BOUND_LOWER : Bound.BOUND_EXACT;
-
-            TT.store(pos.key(), value_to_tt(bestValue, ss[ssPos].ply), bt, ttDepth, move, ss[ssPos].eval, evalMargin);
+            TT.store(pos.key(), value_to_tt(bestValue, ss[ssPos].ply), PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, ttDepth, bestMove, ss[ssPos].eval, ss[ssPos].evalMargin);
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
 
