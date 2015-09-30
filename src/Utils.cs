@@ -99,8 +99,6 @@ namespace Portfish
 
         internal static readonly int[][] SquareDistance = new int[64][]; // 64, 64
 
-        internal static readonly byte[] BitCount8Bit = new byte[256];
-
         internal static readonly int[] MS1BTable = new int[256];
 
         internal static readonly int[] RDeltas = { SquareC.DELTA_N, SquareC.DELTA_E, SquareC.DELTA_S, SquareC.DELTA_W };
@@ -143,11 +141,6 @@ namespace Portfish
                 {
                     MS1BTable[k++] = i;
                 }
-            }
-
-            for (ulong b = 0; b < 256; b++)
-            {
-                BitCount8Bit[b] = (byte)(Bitcount.popcount_1s_Max15(b));
             }
 
             for (var s = SquareC.SQ_A1; s <= SquareC.SQ_H8; s++)
@@ -385,8 +378,11 @@ namespace Portfish
                 // until we find the one that passes the verification test.
                 do
                 {
-                    do magics[s] = pick_random(rk, booster);
-                    while (BitCount8Bit[(magics[s] * masks[s]) >> 56] < 6) ;
+                    do
+                    {
+                        magics[s] = pick_random(rk, booster);
+                    }
+                    while (Bitcount.popcount_1s_Max15((magics[s] * masks[s]) >> 56) < 6);
 
                     Array.Clear(attacks[s], 0, size);
 
