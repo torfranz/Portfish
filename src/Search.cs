@@ -429,6 +429,8 @@ namespace Portfish
             Chess960 = pos.chess960;
             //SearchTime.Restart();
             Evaluate.RootColor = pos.sideToMove;
+            Evaluate.ValueDraw[Evaluate.RootColor] = ValueC.VALUE_DRAW - Evaluate.ContemptFactor;
+            Evaluate.ValueDraw[~Evaluate.RootColor] = ValueC.VALUE_DRAW + Evaluate.ContemptFactor;
             TimeMgr.init(Limits, pos.startpos_ply_counter(), pos.sideToMove);
             TT.new_search();
             H.clear();
@@ -805,7 +807,7 @@ namespace Portfish
                 if ((SignalsStop || pos.is_draw(false) || ss[ssPos].ply > Constants.MAX_PLY))
                 {
                     MovesSearchedBroker.Free();
-                    return Evaluate.ValueDrawContempt;
+                    return Evaluate.ValueDraw[pos.sideToMove];
                 }
 
                 // Step 3. Mate distance pruning. Even if we mate at the next move our score
@@ -1491,7 +1493,7 @@ namespace Portfish
             // Check for an instant draw or maximum ply reached
             if (pos.is_draw(true) || ss[ssPos].ply > Constants.MAX_PLY)
             {
-                return Evaluate.ValueDrawContempt;
+                return Evaluate.ValueDraw[pos.sideToMove];
             }
 
             // Decide whether or not to include checks, this fixes also the type of
