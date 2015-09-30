@@ -1456,6 +1456,7 @@ namespace Portfish
             TTEntry tte;
             uint ttePos = 0;
             int ttDepth;
+            Key posKey;
 
             inCheck = pos.in_check();
 
@@ -1470,7 +1471,8 @@ namespace Portfish
 
             // Transposition table lookup. At PV nodes, we don't use the TT for
             // pruning, but only for move ordering.
-            tteHasValue = TT.probe(pos.key(), ref ttePos, out tte);
+            posKey = pos.key();
+            tteHasValue = TT.probe(posKey, ref ttePos, out tte);
             ttMove = (tteHasValue ? tte.move() : MoveC.MOVE_NONE);
             ttValue = tteHasValue ? value_from_tt(tte.value(), ss[ssPos].ply) : ValueC.VALUE_ZERO;
 
@@ -1636,7 +1638,7 @@ namespace Portfish
                         }
                         else // Fail high
                         {
-                            TT.store(pos.key(), value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, ttDepth, move, ss[ssPos].eval, ss[ssPos].evalMargin);
+                            TT.store(posKey, value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, ttDepth, move, ss[ssPos].eval, ss[ssPos].evalMargin);
                             return value;
                         }
                     }
@@ -1657,7 +1659,7 @@ namespace Portfish
                 return Utils.mated_in(ss[ssPos].ply); // Plies to mate from the root
             }
 
-            TT.store(pos.key(), value_to_tt(bestValue, ss[ssPos].ply), PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, ttDepth, bestMove, ss[ssPos].eval, ss[ssPos].evalMargin);
+            TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, ttDepth, bestMove, ss[ssPos].eval, ss[ssPos].evalMargin);
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
 
