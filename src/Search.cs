@@ -390,8 +390,12 @@ namespace Portfish
             Chess960 = pos.chess960;
             //SearchTime.Restart();
             Evaluate.RootColor = pos.sideToMove;
-            Evaluate.ValueDraw[Evaluate.RootColor] = ValueC.VALUE_DRAW - Evaluate.ContemptFactor;
-            Evaluate.ValueDraw[1 - Evaluate.RootColor] = ValueC.VALUE_DRAW + Evaluate.ContemptFactor;
+
+            MaterialEntry e;
+            pos.this_thread().materialTable.probe(pos, out e);
+            int scaledCF = Evaluate.ContemptFactor * e.game_phase() / PhaseC.PHASE_MIDGAME;
+            Evaluate.ValueDraw[Evaluate.RootColor] = ValueC.VALUE_DRAW - scaledCF;
+            Evaluate.ValueDraw[1 - Evaluate.RootColor] = ValueC.VALUE_DRAW + scaledCF;
             TimeMgr.init(Limits, pos.startpos_ply_counter(), pos.sideToMove);
             TT.new_search();
             H.clear();
