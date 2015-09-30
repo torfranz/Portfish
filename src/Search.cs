@@ -1474,7 +1474,7 @@ namespace Portfish
             posKey = pos.key();
             tteHasValue = TT.probe(posKey, ref ttePos, out tte);
             ttMove = (tteHasValue ? tte.move() : MoveC.MOVE_NONE);
-            ttValue = tteHasValue ? value_from_tt(tte.value(), ss[ssPos].ply) : ValueC.VALUE_ZERO;
+            ttValue = tteHasValue ? value_from_tt(tte.value(), ss[ssPos].ply) : ValueC.VALUE_NONE;
 
             // Decide whether or not to include checks, this fixes also the type of
             // TT entry depth that we are going to use. Note that in qsearch we use
@@ -1627,8 +1627,7 @@ namespace Portfish
                 if (value > bestValue)
                 {
                     bestValue = value;
-                    bestMove = move;
-
+                    
                     if (value > alpha)
                     {
                         if (PvNode && value < beta) // Update alpha here! Always alpha < beta
@@ -1659,7 +1658,9 @@ namespace Portfish
                 return Utils.mated_in(ss[ssPos].ply); // Plies to mate from the root
             }
 
-            TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, ttDepth, bestMove, ss[ssPos].eval, ss[ssPos].evalMargin);
+            TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), 
+                PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
+                ttDepth, bestMove, ss[ssPos].eval, ss[ssPos].evalMargin);
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
 
