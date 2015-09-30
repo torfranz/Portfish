@@ -148,6 +148,7 @@ namespace Portfish
                            SCALE_FACTOR_NONE = 255;
     };
 
+    [Flags]
     internal enum Bound
     {
         BOUND_NONE = 0,

@@ -803,10 +803,10 @@ namespace Portfish
             // a fail high/low. Biggest advantage at probing at PV nodes is to have a
             // smooth experience in analysis mode. We don't probe at Root nodes otherwise
             // we should also update RootMoveList to avoid bogus output.
-            if (!RootNode && tteHasValue
-                && (PvNode
-                        ? tte.depth() >= depth && tte.type() == Bound.BOUND_EXACT
-                        : can_return_tt(tte, depth, ttValue, beta)))
+            if (!RootNode && tteHasValue && tte.depth() >= depth 
+                    && (PvNode ? tte.type() == Bound.BOUND_EXACT 
+                            : ttValue >= beta ? ((tte.type() & Bound.BOUND_LOWER) != 0 )
+                                              : ((tte.type() & Bound.BOUND_UPPER) != 0)))
             {
                 TT.entries[ttePos].set_generation(TT.generation);
                 ss[ssPos].currentMove = ttMove; // Can be MOVE_NONE
@@ -1479,7 +1479,10 @@ namespace Portfish
             // only two types of depth in TT: DEPTH_QS_CHECKS or DEPTH_QS_NO_CHECKS.
             ttDepth = (inCheck || depth >= DepthC.DEPTH_QS_CHECKS ? DepthC.DEPTH_QS_CHECKS : DepthC.DEPTH_QS_NO_CHECKS);
             
-            if (!PvNode && tteHasValue && can_return_tt(tte, ttDepth, ttValue, beta))
+            if (tteHasValue && tte.depth() >= depth
+                    && (PvNode ? tte.type() == Bound.BOUND_EXACT
+                            : ttValue >= beta ? ((tte.type() & Bound.BOUND_LOWER) != 0)
+                                              : ((tte.type() & Bound.BOUND_UPPER) != 0)))
             {
                 ss[ssPos].currentMove = ttMove; // Can be MOVE_NONE
                 return ttValue;
@@ -1857,20 +1860,6 @@ namespace Portfish
             }
 
             return false;
-        }
-
-        // can_return_tt() returns true if a transposition table score can be used to
-        // cut-off at a given point in search.
-#if AGGR_INLINE
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-#endif
-
-        private static bool can_return_tt(TTEntry tte, int depth, int v, int beta)
-        {
-            return (tte.depth() >= depth || v >= Math.Max(ValueC.VALUE_MATE_IN_MAX_PLY, beta)
-                    || v < Math.Min(ValueC.VALUE_MATED_IN_MAX_PLY, beta))
-                   && ((((tte.type() & Bound.BOUND_LOWER) != 0) && v >= beta)
-                       || (((tte.type() & Bound.BOUND_UPPER) != 0) && v < beta));
         }
 
         // refine_eval() returns the transposition table score if possible, otherwise
