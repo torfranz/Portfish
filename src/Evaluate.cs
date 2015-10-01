@@ -298,8 +298,6 @@ namespace Portfish
 
         private const int Peak = (1280);
 
-        internal static int RootColor;
-
         internal static void init()
         {
             // Alloc arrays
@@ -357,7 +355,7 @@ namespace Portfish
             var margin = 0;
             string totals;
 
-            RootColor = pos.sideToMove;
+            Search.RootColor = pos.sideToMove;
 
             TraceStream.Remove(0, TraceStream.Length);
             Array.Clear(TracedScores[0], 0, 16);
@@ -1158,7 +1156,7 @@ namespace Portfish
                 // value that will be used for pruning because this value can sometimes
                 // be very big, and so capturing a single attacking piece can therefore
                 // result in a score change far bigger than the value of the captured piece.
-                kingScore = KingDangerTable[Us == RootColor ? 1 : 0][attackUnits];
+                kingScore = KingDangerTable[Us == Search.RootColor ? 1 : 0][attackUnits];
                 score -= kingScore;
                 if (Us == ColorC.WHITE)
                 {

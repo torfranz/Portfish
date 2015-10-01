@@ -267,6 +267,8 @@ namespace Portfish
 
         private static int[] DrawValue = new int[2];
 
+        internal static int RootColor;
+
         internal static void init()
         {
             SearchTime.Start();
