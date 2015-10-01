@@ -181,6 +181,82 @@ namespace Portfish
         }
     };
 
+    // When playing with strength handicap choose best move among the MultiPV set
+    // using a statistical rule dependent on 'level'. Idea by Heinz van Saanen.
+    internal class Skill : IDisposable
+    {
+        internal Skill(int l)
+        {
+            level = l;
+        }
+
+        public void Dispose()
+        {
+            if (enabled()) // Swap best PV line with the sub-optimal one
+            {
+                var bestpos = Search.find(Search.RootMoves, 0, Search.RootMoves.Count, best != 0 ? best : pick_move());
+                var temp = Search.RootMoves[0];
+                Search.RootMoves[0] = Search.RootMoves[bestpos];
+                Search.RootMoves[bestpos] = temp;
+            }
+        }
+
+        internal bool enabled()
+        {
+            return level < 20;
+        }
+
+        internal bool time_to_pick(int depth)
+        {
+            return depth == 1 + level;
+        }
+
+        internal Move pick_move()
+        {
+            Debug.Assert(Search.MultiPV > 1);
+
+            // PRNG sequence should be not deterministic
+            for (var i = Math.Abs(DateTime.Now.Millisecond % 50); i > 0; i--)
+            {
+                Search.rk.rand();
+            }
+
+            // RootMoves are already sorted by score in descending order
+            var size = Math.Min(Search.MultiPV, Search.RootMoves.Count);
+            var variance = Math.Min(Search.RootMoves[0].score - Search.RootMoves[size - 1].score, Constants.PawnValueMidgame);
+            var weakness = 120 - 2 * level;
+            var max_s = -ValueC.VALUE_INFINITE;
+            best = MoveC.MOVE_NONE;
+
+            // Choose best move. For each move score we add two terms both dependent on
+            // weakness, one deterministic and bigger for weaker moves, and one random,
+            // then we choose the move with the resulting highest score.
+            for (var i = 0; i < size; i++)
+            {
+                var s = Search.RootMoves[i].score;
+
+                // Don't allow crazy blunders even at very low skills
+                if (i > 0 && Search.RootMoves[i - 1].score > s + 2 * Constants.PawnValueMidgame)
+                {
+                    break;
+                }
+
+                // This is our magic formula
+                s += (weakness * (Search.RootMoves[0].score - s) + variance * (int)(Search.rk.rand() % (ulong)weakness)) / 128;
+
+                if (s > max_s)
+                {
+                    max_s = s;
+                    best = Search.RootMoves[i].pv[0];
+                }
+            }
+            return best;
+        }
+
+        int level;
+        Move best = MoveC.MOVE_NONE;
+    }
+
     internal static class Search
     {
         #region SignalsType
@@ -255,15 +331,11 @@ namespace Portfish
         private const int TimerResolution = 5;
 
         /// Namespace variables
-        private static int MultiPV, UCIMultiPV, PVIdx; // was UInt64
+        internal static int MultiPV, UCIMultiPV, PVIdx; // was UInt64
 
         private static int BestMoveChanges;
 
-        private static int SkillLevel;
-
-        private static Move skillBest;
-
-        private static bool SkillLevelEnabled, Chess960;
+        private static bool Chess960;
 
         private static readonly History H = new History();
 
@@ -442,15 +514,6 @@ namespace Portfish
                 }
             }
 
-            UCIMultiPV = int.Parse(OptionMap.Instance["MultiPV"].v);
-            SkillLevel = int.Parse(OptionMap.Instance["Skill Level"].v);
-
-            // Do we have to play with skill handicap? In this case enable MultiPV that
-            // we will use behind the scenes to retrieve a set of possible moves.
-            SkillLevelEnabled = (SkillLevel < 20);
-            skillBest = MoveC.MOVE_NONE;
-            MultiPV = (SkillLevelEnabled ? Math.Max(UCIMultiPV, 4) : UCIMultiPV);
-
             var ttSize = uint.Parse(OptionMap.Instance["Hash"].v);
             if (TT.size != ttSize)
             {
@@ -481,21 +544,7 @@ namespace Portfish
             Threads.set_timer(0); // Stop timer
             Threads.sleep();
 
-            // When using skills swap best PV line with the sub-optimal one
-            if (SkillLevelEnabled)
-            {
-                if (skillBest == MoveC.MOVE_NONE) // Still unassigned ?
-                {
-                    skillBest = do_skill_level();
-                }
-
-                var bestpos = find(RootMoves, 0, RootMoves.Count, skillBest);
-                var temp = RootMoves[0];
-                RootMoves[0] = RootMoves[bestpos];
-                RootMoves[bestpos] = temp;
-            }
-
-            finalize:
+finalize:
 
             // When we reach max depth we arrive here even without Signals.stop is raised,
             // but if we are pondering or in infinite search, we shouldn't print the best
@@ -530,173 +579,184 @@ namespace Portfish
             bestValue = delta = -ValueC.VALUE_INFINITE;
             ss[ssPos].currentMove = MoveC.MOVE_NULL;
 
-            // Iterative deepening loop until requested to stop or target depth reached
-            while (++depth <= Constants.MAX_PLY && !SignalsStop && ((Limits.depth == 0) || depth <= Limits.depth))
+            UCIMultiPV = int.Parse(OptionMap.Instance["MultiPV"].v);
+            using (var skill = new Skill(int.Parse(OptionMap.Instance["Skill Level"].v)))
             {
-                // Save last iteration's scores before first PV line is searched and all
-                // the move scores but the (new) PV are set to -VALUE_INFINITE.
-                for (var i = 0; i < RootMoves.Count; i++)
-                {
-                    RootMoves[i].prevScore = RootMoves[i].score;
-                }
 
-                prevBestMoveChanges = BestMoveChanges;
-                BestMoveChanges = 0;
+                // Do we have to play with skill handicap? In this case enable MultiPV that
+                // we will use behind the scenes to retrieve a set of possible moves.
+                MultiPV = skill.enabled() ? Math.Max(UCIMultiPV, 4) : UCIMultiPV;
 
-                // MultiPV loop. We perform a full root search for each PV line
-                for (PVIdx = 0; PVIdx < Math.Min(MultiPV, RootMoves.Count); PVIdx++)
+                // Iterative deepening loop until requested to stop or target depth reached
+                while (++depth <= Constants.MAX_PLY && !SignalsStop && ((Limits.depth == 0) || depth <= Limits.depth))
                 {
-                    // Set aspiration window default width
-                    if (depth >= 5 && Math.Abs(RootMoves[PVIdx].prevScore) < ValueC.VALUE_KNOWN_WIN)
+                    // Save last iteration's scores before first PV line is searched and all
+                    // the move scores but the (new) PV are set to -VALUE_INFINITE.
+                    for (var i = 0; i < RootMoves.Count; i++)
                     {
-                        delta = 16;
-                        alpha = RootMoves[PVIdx].prevScore - delta;
-                        beta = RootMoves[PVIdx].prevScore + delta;
-                    }
-                    else
-                    {
-                        alpha = -ValueC.VALUE_INFINITE;
-                        beta = ValueC.VALUE_INFINITE;
+                        RootMoves[i].prevScore = RootMoves[i].score;
                     }
 
-                    // Start with a small aspiration window and, in case of fail high/low,
-                    // research with bigger window until not failing high/low anymore.
-                    while(true)
+                    prevBestMoveChanges = BestMoveChanges;
+                    BestMoveChanges = 0;
+
+                    // MultiPV loop. We perform a full root search for each PV line
+                    for (PVIdx = 0; PVIdx < Math.Min(MultiPV, RootMoves.Count); PVIdx++)
                     {
-                        // Search starts from ss+1 to allow referencing (ss-1). This is
-                        // needed by update gains and ss copy when splitting at Root.
-                        bestValue = search(NodeTypeC.Root, pos, ss, ssPos + 1, alpha, beta, depth * DepthC.ONE_PLY);
-
-                        // Bring to front the best move. It is critical that sorting is
-                        // done with a stable algorithm because all the values but the first
-                        // and eventually the new best one are set to -VALUE_INFINITE and
-                        // we want to keep the same order for all the moves but the new
-                        // PV that goes to the front. Note that in case of MultiPV search
-                        // the already searched PV lines are preserved.
-                        Utils.sort(RootMoves, PVIdx, RootMoves.Count);
-                        //sort<RootMove>(RootMoves.begin() + PVIdx, RootMoves.end());
-
-                        // Write PV back to transposition table in case the relevant
-                        // entries have been overwritten during the search.
-                        for (var i = 0; i <= PVIdx; i++)
+                        // Set aspiration window default width
+                        if (depth >= 5 && Math.Abs(RootMoves[PVIdx].prevScore) < ValueC.VALUE_KNOWN_WIN)
                         {
-                            RootMoves[i].insert_pv_in_tt(pos);
+                            delta = 16;
+                            alpha = RootMoves[PVIdx].prevScore - delta;
+                            beta = RootMoves[PVIdx].prevScore + delta;
                         }
-
-                        // If search has been stopped return immediately. Sorting and
-                        // writing PV back to TT is safe becuase RootMoves is still
-                        // valid, although refers to previous iteration.
-                        if (SignalsStop)
-                        {
-                            LoopStackBroker.Free(ls);
-                            return;
-                        }
-
-                        // In case of failing high/low increase aspiration window and
-                        // research, otherwise sort multi-PV lines and exit the loop.
-                        if (bestValue > alpha && bestValue < beta)
-                        {
-                            Utils.sort(RootMoves, 0, PVIdx);
-                            pv_info_to_uci(pos, depth, alpha, beta);
-                            break;
-                        }
-
-                        // Give some update (without cluttering the UI) before to research
-                        if (SearchTime.ElapsedMilliseconds > 3000)
-                        {
-                            pv_info_to_uci(pos, depth, alpha, beta);
-                        }
-
-                        if (Math.Abs(bestValue) >= ValueC.VALUE_KNOWN_WIN)
+                        else
                         {
                             alpha = -ValueC.VALUE_INFINITE;
                             beta = ValueC.VALUE_INFINITE;
                         }
-                        else if (bestValue >= beta)
+
+                        // Start with a small aspiration window and, in case of fail high/low,
+                        // research with bigger window until not failing high/low anymore.
+                        while (true)
                         {
-                            beta += delta;
-                            delta += delta / 2;
+                            // Search starts from ss+1 to allow referencing (ss-1). This is
+                            // needed by update gains and ss copy when splitting at Root.
+                            bestValue = search(NodeTypeC.Root, pos, ss, ssPos + 1, alpha, beta, depth * DepthC.ONE_PLY);
+
+                            // Bring to front the best move. It is critical that sorting is
+                            // done with a stable algorithm because all the values but the first
+                            // and eventually the new best one are set to -VALUE_INFINITE and
+                            // we want to keep the same order for all the moves but the new
+                            // PV that goes to the front. Note that in case of MultiPV search
+                            // the already searched PV lines are preserved.
+                            Utils.sort(RootMoves, PVIdx, RootMoves.Count);
+                            //sort<RootMove>(RootMoves.begin() + PVIdx, RootMoves.end());
+
+                            // Write PV back to transposition table in case the relevant
+                            // entries have been overwritten during the search.
+                            for (var i = 0; i <= PVIdx; i++)
+                            {
+                                RootMoves[i].insert_pv_in_tt(pos);
+                            }
+
+                            // If search has been stopped return immediately. Sorting and
+                            // writing PV back to TT is safe becuase RootMoves is still
+                            // valid, although refers to previous iteration.
+                            if (SignalsStop)
+                            {
+                                LoopStackBroker.Free(ls);
+                                return;
+                            }
+
+                            // In case of failing high/low increase aspiration window and
+                            // research, otherwise exit the loop.
+                            if (bestValue > alpha && bestValue < beta)
+                            {
+                                break;
+                            }
+
+                            // Give some update (without cluttering the UI) before to research
+                            if (SearchTime.ElapsedMilliseconds > 3000)
+                            {
+                                pv_info_to_uci(pos, depth, alpha, beta);
+                            }
+
+                            if (Math.Abs(bestValue) >= ValueC.VALUE_KNOWN_WIN)
+                            {
+                                alpha = -ValueC.VALUE_INFINITE;
+                                beta = ValueC.VALUE_INFINITE;
+                            }
+                            else if (bestValue >= beta)
+                            {
+                                beta += delta;
+                                delta += delta / 2;
+                            }
+                            else
+                            {
+                                SignalsFailedLowAtRoot = true;
+                                SignalsStopOnPonderhit = false;
+
+                                alpha -= delta;
+                                delta += delta / 2;
+                            }
+
+                            Debug.Assert(alpha >= -ValueC.VALUE_INFINITE && beta <= ValueC.VALUE_INFINITE);
                         }
-                        else
+
+                        // Sort the PV lines searched so far and update the GUI
+                        Utils.sort(RootMoves, 0, PVIdx);
+                        pv_info_to_uci(pos, depth, alpha, beta);
+                    }
+
+                    // Do we need to pick now the sub-optimal best move ?
+                    if (skill.enabled() && skill.time_to_pick(depth))
+                    {
+                        skill.pick_move();
+                    }
+
+                    // Filter out startup noise when monitoring best move stability
+                    if (depth > 2 && (BestMoveChanges != 0))
+                    {
+                        bestMoveNeverChanged = false;
+                    }
+
+                    // Do we have time for the next iteration? Can we stop searching now?
+                    if (Limits.use_time_management() && !SignalsStopOnPonderhit)
+                    {
+                        var stop = false; // Local variable, not the volatile Signals.stop
+
+                        // Take in account some extra time if the best move has changed
+                        if (depth > 4 && depth < 50)
                         {
-                            SignalsFailedLowAtRoot = true;
-                            SignalsStopOnPonderhit = false;
-
-                            alpha -= delta;
-                            delta += delta / 2;
+                            TimeMgr.pv_instability(BestMoveChanges, prevBestMoveChanges);
                         }
 
-                        Debug.Assert(alpha >= -ValueC.VALUE_INFINITE && beta <= ValueC.VALUE_INFINITE);
-                    }
-                }
-
-                // Skills: Do we need to pick now the best move ?
-                if (SkillLevelEnabled && depth == 1 + SkillLevel)
-                {
-                    skillBest = do_skill_level();
-                }
-
-                // Filter out startup noise when monitoring best move stability
-                if (depth > 2 && (BestMoveChanges != 0))
-                {
-                    bestMoveNeverChanged = false;
-                }
-
-                // Do we have time for the next iteration? Can we stop searching now?
-                if (Limits.use_time_management() && !SignalsStopOnPonderhit)
-                {
-                    var stop = false; // Local variable, not the volatile Signals.stop
-
-                    // Take in account some extra time if the best move has changed
-                    if (depth > 4 && depth < 50)
-                    {
-                        TimeMgr.pv_instability(BestMoveChanges, prevBestMoveChanges);
-                    }
-
-                    // Stop search if most of available time is already consumed. We
-                    // probably don't have enough time to search the first move at the
-                    // next iteration anyway.
-                    if (SearchTime.ElapsedMilliseconds > (TimeMgr.available_time() * 62) / 100)
-                    {
-                        stop = true;
-                    }
-
-                    // Stop search early if one move seems to be much better than others
-                    if (depth >= 12 && !stop
-                        && ((bestMoveNeverChanged && (pos.captured_piece_type() != 0))
-                            || SearchTime.ElapsedMilliseconds > (TimeMgr.available_time() * 40) / 100))
-                    {
-                        var rBeta = bestValue - 2 * Constants.PawnValueMidgame;
-                        ss[ssPos + 1].excludedMove = RootMoves[0].pv[0];
-                        ss[ssPos + 1].skipNullMove = 1;
-                        var v = search(
-                            NodeTypeC.NonPV,
-                            pos,
-                            ss,
-                            ssPos + 1,
-                            rBeta - 1,
-                            rBeta,
-                            (depth - 3) * DepthC.ONE_PLY);
-                        ss[ssPos + 1].skipNullMove = 0;
-                        ss[ssPos + 1].excludedMove = MoveC.MOVE_NONE;
-
-                        if (v < rBeta)
+                        // Stop search if most of available time is already consumed. We
+                        // probably don't have enough time to search the first move at the
+                        // next iteration anyway.
+                        if (SearchTime.ElapsedMilliseconds > (TimeMgr.available_time() * 62) / 100)
                         {
                             stop = true;
                         }
-                    }
 
-                    if (stop)
-                    {
-                        // If we are allowed to ponder do not stop the search now but
-                        // keep pondering until GUI sends "ponderhit" or "stop".
-                        if (Limits.ponder)
+                        // Stop search early if one move seems to be much better than others
+                        if (depth >= 12 && !stop
+                            && ((bestMoveNeverChanged && (pos.captured_piece_type() != 0))
+                                || SearchTime.ElapsedMilliseconds > (TimeMgr.available_time() * 40) / 100))
                         {
-                            SignalsStopOnPonderhit = true;
+                            var rBeta = bestValue - 2 * Constants.PawnValueMidgame;
+                            ss[ssPos + 1].excludedMove = RootMoves[0].pv[0];
+                            ss[ssPos + 1].skipNullMove = 1;
+                            var v = search(
+                                NodeTypeC.NonPV,
+                                pos,
+                                ss,
+                                ssPos + 1,
+                                rBeta - 1,
+                                rBeta,
+                                (depth - 3) * DepthC.ONE_PLY);
+                            ss[ssPos + 1].skipNullMove = 0;
+                            ss[ssPos + 1].excludedMove = MoveC.MOVE_NONE;
+
+                            if (v < rBeta)
+                            {
+                                stop = true;
+                            }
                         }
-                        else
+
+                        if (stop)
                         {
-                            SignalsStop = true;
+                            // If we are allowed to ponder do not stop the search now but
+                            // keep pondering until GUI sends "ponderhit" or "stop".
+                            if (Limits.ponder)
+                            {
+                                SignalsStopOnPonderhit = true;
+                            }
+                            else
+                            {
+                                SignalsStop = true;
+                            }
                         }
                     }
                 }
@@ -1938,50 +1998,6 @@ namespace Portfish
             }
         }
 
-        // When playing with strength handicap choose best move among the MultiPV set
-        // using a statistical rule dependent on SkillLevel. Idea by Heinz van Saanen.
-        internal static int do_skill_level()
-        {
-            Debug.Assert(MultiPV > 1);
-
-            // PRNG sequence should be not deterministic
-            for (var i = Math.Abs(DateTime.Now.Millisecond % 50); i > 0; i--)
-            {
-                rk.rand();
-            }
-
-            // RootMoves are already sorted by score in descending order
-            var size = Math.Min(MultiPV, RootMoves.Count);
-            var variance = Math.Min(RootMoves[0].score - RootMoves[size - 1].score, Constants.PawnValueMidgame);
-            var weakness = 120 - 2 * SkillLevel;
-            var max_s = -ValueC.VALUE_INFINITE;
-            var best = MoveC.MOVE_NONE;
-
-            // Choose best move. For each move score we add two terms both dependent on
-            // weakness, one deterministic and bigger for weaker moves, and one random,
-            // then we choose the move with the resulting highest score.
-            for (var i = 0; i < size; i++)
-            {
-                var s = RootMoves[i].score;
-
-                // Don't allow crazy blunders even at very low skills
-                if (i > 0 && RootMoves[i - 1].score > s + 2 * Constants.PawnValueMidgame)
-                {
-                    break;
-                }
-
-                // This is our magic formula
-                s += (weakness * (RootMoves[0].score - s) + variance * (int)(rk.rand() % (ulong)weakness)) / 128;
-
-                if (s > max_s)
-                {
-                    max_s = s;
-                    best = RootMoves[i].pv[0];
-                }
-            }
-            return best;
-        }
-
         // score_to_uci() converts a value to a string suitable for use with the UCI
         // protocol specifications:
         //
@@ -2080,7 +2096,7 @@ namespace Portfish
         }
 
         // Returns the position of the first found item
-        private static int find(List<RootMove> RootMoves, int firstPos, int lastPos, int moveToFind)
+        internal static int find(List<RootMove> RootMoves, int firstPos, int lastPos, int moveToFind)
         {
             for (var i = firstPos; i < lastPos; i++)
             {
