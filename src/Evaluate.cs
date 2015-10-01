@@ -13,25 +13,25 @@ namespace Portfish
         // attackedBy[color][piece type] is a bitboard representing all squares
         // attacked by a given color and piece type, attackedBy[color][0] contains
         // all squares attacked by the given color.
-        internal readonly ulong[][] attackedBy = new ulong[2][]; // 2, 8
+        internal readonly ulong[][] attackedBy = new ulong[ColorC.COLOR_NB][]; // 2, 8
 
         // kingAdjacentZoneAttacksCount[color] is the number of attacks to squares
         // directly adjacent to the king of the given color. Pieces which attack
         // more than one square are counted multiple times. For instance, if black's
         // king is on g8 and there's a white knight on g5, this knight adds
         // 2 to kingAdjacentZoneAttacksCount[BLACK].
-        internal readonly int[] kingAdjacentZoneAttacksCount = new int[2];
+        internal readonly int[] kingAdjacentZoneAttacksCount = new int[ColorC.COLOR_NB];
 
         // kingAttackersCount[color] is the number of pieces of the given color
         // which attack a square in the kingRing of the enemy king.
-        internal readonly int[] kingAttackersCount = new int[2];
+        internal readonly int[] kingAttackersCount = new int[ColorC.COLOR_NB];
 
         // kingAttackersWeight[color] is the sum of the "weight" of the pieces of the
         // given color which attack a square in the kingRing of the enemy king. The
         // weights of the individual piece types are given by the variables
         // QueenAttackWeight, RookAttackWeight, BishopAttackWeight and
         // KnightAttackWeight in evaluate.cpp
-        internal readonly int[] kingAttackersWeight = new int[2];
+        internal readonly int[] kingAttackersWeight = new int[ColorC.COLOR_NB];
 
         // kingRing[color] is the zone around the king which is considered
         // by the king safety evaluation. This consists of the squares directly
@@ -39,7 +39,7 @@ namespace Portfish
         // squares two ranks in front of the king. For instance, if black's king
         // is on g8, kingRing[BLACK] is a bitboard containing the squares f8, h8,
         // f7, g7, h7, f6, g6 and h6.
-        internal readonly ulong[] kingRing = new ulong[2];
+        internal readonly ulong[] kingRing = new ulong[ColorC.COLOR_NB];
 
         // Pointers to material and pawn hash table entries
         internal MaterialEntry mi;
@@ -48,9 +48,9 @@ namespace Portfish
 
         public EvalInfo()
         {
-            for (var i = 0; i < 2; i++)
+            for (var i = 0; i < ColorC.COLOR_NB; i++)
             {
-                this.attackedBy[i] = new ulong[8];
+                this.attackedBy[i] = new ulong[PieceTypeC.PIECE_TYPE_NB];
             }
         }
     };
@@ -286,11 +286,11 @@ namespace Portfish
 
         // KingDangerTable[Color][attackUnits] contains the actual king danger
         // weighted scores, indexed by color and by a calculated integer number.
-        internal static readonly int[][] KingDangerTable = new int[2][]; // 2, 128
+        internal static readonly int[][] KingDangerTable = new int[ColorC.COLOR_NB][]; // 2, 128
 
         // TracedTerms[Color][PieceType || TracedType] contains a breakdown of the
         // evaluation terms, used when tracing.
-        internal static readonly int[][] TracedScores = new int[2][]; // 2, 16
+        internal static readonly int[][] TracedScores = new int[ColorC.COLOR_NB][]; // 2, 16
 
         internal static StringBuilder TraceStream = new StringBuilder();
 

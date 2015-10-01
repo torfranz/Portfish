@@ -30,16 +30,16 @@ namespace Portfish
     {
         internal const int MaxValue = 2000;
 
-        internal readonly int[][] history = new int[16][]; // [piece][to_square] 16, 64
+        internal readonly int[][] history = new int[PieceC.PIECE_NB][]; // [piece][to_square] 16, 64
 
-        internal readonly int[][] maxGains = new int[16][]; // [piece][to_square] 16, 64
+        internal readonly int[][] maxGains = new int[PieceC.PIECE_NB][]; // [piece][to_square] 16, 64
 
         internal History()
         {
-            for (var i = 0; i < 16; i++)
+            for (var i = 0; i < PieceC.PIECE_NB; i++)
             {
-                this.history[i] = new int[64];
-                this.maxGains[i] = new int[64];
+                this.history[i] = new int[SquareC.SQUARE_NB];
+                this.maxGains[i] = new int[SquareC.SQUARE_NB];
             }
         }
 

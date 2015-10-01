@@ -56,9 +56,9 @@ namespace Portfish
     /// or if we have to ponder while is our opponent's side to move.
     internal sealed class LimitsType
     {
-        internal readonly int[] inc = new int[2];
+        internal readonly int[] inc = new int[ColorC.COLOR_NB];
 
-        internal readonly int[] time = new int[2];
+        internal readonly int[] time = new int[ColorC.COLOR_NB];
 
         internal int movesToGo, movetime, depth, nodes, infinite, mate;
 
@@ -265,7 +265,7 @@ namespace Portfish
 
         private static readonly History H = new History();
 
-        private static int[] DrawValue = new int[2];
+        private static int[] DrawValue = new int[ColorC.COLOR_NB];
 
         internal static int RootColor;
 
@@ -393,7 +393,7 @@ namespace Portfish
             var pos = RootPosition;
             Chess960 = pos.chess960;
             //SearchTime.Restart();
-            Evaluate.RootColor = pos.sideToMove;
+            Search.RootColor = pos.sideToMove;
 
             MaterialEntry e;
             pos.this_thread().materialTable.probe(pos, out e);
@@ -416,8 +416,8 @@ namespace Portfish
             {
                 int cf = int.Parse(OptionMap.Instance["Contempt Factor"].v) * Constants.PawnValueMidgame / 100; // In centipawns
                 cf = cf * e.game_phase() / PhaseC.PHASE_MIDGAME; // Scale down with phase
-                DrawValue[Evaluate.RootColor] = ValueC.VALUE_DRAW - cf;
-                DrawValue[1 - Evaluate.RootColor] = ValueC.VALUE_DRAW + cf;
+                DrawValue[RootColor] = ValueC.VALUE_DRAW - cf;
+                DrawValue[1 - RootColor] = ValueC.VALUE_DRAW + cf;
             }
             else
             {

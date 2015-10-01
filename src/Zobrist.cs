@@ -8,14 +8,14 @@ namespace Portfish
 {
     internal static class Zobrist
     {
-        internal static readonly int[][] PieceSquareTable = new int[16][]; // [piece][square] 16, 64
+        internal static readonly int[][] PieceSquareTable = new int[PieceC.PIECE_NB][]; // [piece][square] 16, 64
 
-        internal static readonly ulong[][][] psq = new ulong[2][][];
+        internal static readonly ulong[][][] psq = new ulong[ColorC.COLOR_NB][][];
         // [color][pieceType][square / piece count]
 
-        internal static readonly ulong[] enpassant = new ulong[8]; // [square]
+        internal static readonly ulong[] enpassant = new ulong[FileC.FILE_NB]; // [square]
 
-        internal static readonly ulong[] castle = new ulong[16]; // [castleRight]
+        internal static readonly ulong[] castle = new ulong[CastleRightC.CASTLE_RIGHT_NB]; // [castleRight]
 
         internal static ulong side;
 
@@ -32,10 +32,10 @@ namespace Portfish
 
             for (var c = ColorC.WHITE; c <= ColorC.BLACK; c++)
             {
-                psq[c] = new ulong[8][];
+                psq[c] = new ulong[PieceTypeC.PIECE_TYPE_NB][];
                 for (var pt = PieceTypeC.PAWN; pt <= PieceTypeC.KING; pt++)
                 {
-                    psq[c][pt] = new ulong[64];
+                    psq[c][pt] = new ulong[SquareC.SQUARE_NB];
                     for (var s = SquareC.SQ_A1; s <= SquareC.SQ_H8; s++)
                     {
                         psq[c][pt][s] = rk.rand();
@@ -62,9 +62,9 @@ namespace Portfish
             side = rk.rand();
             exclusion = rk.rand();
 
-            for (var i = 0; i < 16; i++)
+            for (var i = 0; i < PieceC.PIECE_NB; i++)
             {
-                PieceSquareTable[i] = new int[64];
+                PieceSquareTable[i] = new int[SquareC.SQUARE_NB];
             }
 
             for (var pt = PieceTypeC.PAWN; pt <= PieceTypeC.KING; pt++)

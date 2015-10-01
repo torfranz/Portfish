@@ -25,7 +25,7 @@ namespace Portfish
 
     internal sealed class CheckInfo
     {
-        internal readonly ulong[] checkSq = new ulong[8];
+        internal readonly ulong[] checkSq = new ulong[PieceTypeC.PIECE_TYPE_NB];
 
         internal ulong dcCandidates;
 
@@ -164,29 +164,29 @@ namespace Portfish
 
         // Static variables
         
-        internal readonly int[] board = new int[64]; // [square]
+        internal readonly int[] board = new int[SquareC.SQUARE_NB]; // [square]
 
         // Bitboards
-        internal readonly ulong[] byTypeBB = new ulong[8]; // [pieceType]
+        internal readonly ulong[] byTypeBB = new ulong[PieceTypeC.PIECE_TYPE_NB]; // [pieceType]
 
-        internal readonly ulong[] byColorBB = new ulong[2]; // [color]
+        internal readonly ulong[] byColorBB = new ulong[ColorC.COLOR_NB]; // [color]
 
         internal ulong occupied_squares; // byTypeBB[ALL_PIECES];
 
         // Piece counts
-        internal readonly int[][] pieceCount = new int[2][]; // [color][pieceType] 2, 8
+        internal readonly int[][] pieceCount = new int[ColorC.COLOR_NB][]; // [color][pieceType] 2, 8
 
         // Piece lists
-        internal readonly int[][][] pieceList = new int[2][][]; // [color][pieceType][index] 2, 8, 16
+        internal readonly int[][][] pieceList = new int[ColorC.COLOR_NB][][]; // [color][pieceType][index] 2, 8, 16
 
-        internal readonly int[] index = new int[64]; // [square]
+        internal readonly int[] index = new int[SquareC.SQUARE_NB]; // [square]
 
         // Other info
-        internal readonly int[] castleRightsMask = new int[64]; // [square]
+        internal readonly int[] castleRightsMask = new int[SquareC.SQUARE_NB]; // [square]
 
-        internal readonly int[][] castleRookSquare = new int[2][]; // [color][side] 2,2
+        internal readonly int[][] castleRookSquare = new int[ColorC.COLOR_NB][]; // [color][side] 2,2
 
-        internal readonly ulong[][] castlePath = new ulong[2][]; // [color][side] 2,2
+        internal readonly ulong[][] castlePath = new ulong[ColorC.COLOR_NB][]; // [color][side] 2,2
 
         internal StateInfo startState = new StateInfo();
 
@@ -837,10 +837,10 @@ namespace Portfish
         {
             for (var i = 0; i < 2; i++)
             {
-                this.castleRookSquare[i] = new int[2];
-                this.castlePath[i] = new ulong[2];
-                this.pieceCount[i] = new int[8];
-                this.pieceList[i] = new int[8][];
+                this.castleRookSquare[i] = new int[CastlingSideC.CASTLING_SIDE_NB];
+                this.castlePath[i] = new ulong[CastlingSideC.CASTLING_SIDE_NB];
+                this.pieceCount[i] = new int[PieceTypeC.PIECE_TYPE_NB];
+                this.pieceList[i] = new int[PieceTypeC.PIECE_TYPE_NB][];
                 for (var j = 0; j < 8; j++)
                 {
                     this.pieceList[i][j] = new int[16];
@@ -2500,7 +2500,7 @@ namespace Portfish
             step++;
             if (debugKingCount)
             {
-                var kingCount = new int[2];
+                var kingCount = new int[ColorC.COLOR_NB];
 
                 for (var s = SquareC.SQ_A1; s <= SquareC.SQ_H8; s++)
                 {

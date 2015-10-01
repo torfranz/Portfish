@@ -132,12 +132,16 @@ namespace Portfish
             BLACK_OO = 4,
             BLACK_OOO = 8,
             BLACK_ANY = BLACK_OO | BLACK_OOO,
-            ALL_CASTLES = 15;
+            ALL_CASTLES = 15,
+            CASTLE_RIGHT_NB = 16;
     };
 
     internal static class CastlingSideC
     {
-        internal const int KING_SIDE = 0, QUEEN_SIDE = 1;
+        internal const int 
+            KING_SIDE = 0, 
+            QUEEN_SIDE = 1,
+            CASTLING_SIDE_NB = 2;
     };
 
     internal static class ScaleFactorC
@@ -176,7 +180,7 @@ namespace Portfish
 
     internal static class PieceTypeC
     {
-        internal const int NO_PIECE_TYPE = 0, PAWN = 1, KNIGHT = 2, BISHOP = 3, ROOK = 4, QUEEN = 5, KING = 6;
+        internal const int NO_PIECE_TYPE = 0, PAWN = 1, KNIGHT = 2, BISHOP = 3, ROOK = 4, QUEEN = 5, KING = 6, PIECE_TYPE_NB = 8;
     };
 
     internal static class PieceC
@@ -193,13 +197,14 @@ namespace Portfish
                            B_BISHOP = 11,
                            B_ROOK = 12,
                            B_QUEEN = 13,
-                           B_KING = 14;
+                           B_KING = 14,
+                           PIECE_NB = 16;
     };
 
     internal static class ColorC
     {
         // Constants
-        internal const int WHITE = 0, BLACK = 1, NO_COLOR = 2;
+        internal const int WHITE = 0, BLACK = 1, NO_COLOR = 2, COLOR_NB = 2;
     };
 
     internal static class DepthC
@@ -281,6 +286,8 @@ namespace Portfish
 
         internal const int SQ_NONE = 64;
 
+        internal const int SQUARE_NB = 64;
+
         internal const int DELTA_N = 8, DELTA_E = 1, DELTA_S = -8, DELTA_W = -1;
 
         internal const int DELTA_NN = DELTA_N + DELTA_N,
@@ -300,7 +307,8 @@ namespace Portfish
                            FILE_E = 4,
                            FILE_F = 5,
                            FILE_G = 6,
-                           FILE_H = 7;
+                           FILE_H = 7,
+                           FILE_NB = 8;
     };
 
     internal static class RankC
@@ -312,7 +320,8 @@ namespace Portfish
                            RANK_5 = 4,
                            RANK_6 = 5,
                            RANK_7 = 6,
-                           RANK_8 = 7;
+                           RANK_8 = 7,
+                           RANK_NB = 8;
     };
 
     internal static class MoveTypeC

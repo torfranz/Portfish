@@ -135,8 +135,8 @@ namespace Portfish
 
         internal MaterialTable()
         {
-            this.pieceCount[0] = new int[6];
-            this.pieceCount[1] = new int[6];
+            this.pieceCount[0] = new int[PieceTypeC.PIECE_TYPE_NB];
+            this.pieceCount[1] = new int[PieceTypeC.PIECE_TYPE_NB];
             for (var i = 0; i < Constants.MaterialTableSize; i++)
             {
                 this.entries[i] = new MaterialEntry();
@@ -178,7 +178,7 @@ namespace Portfish
                 new[] { 106, 101, 3, 151, 171, 41 }
             };
 
-        private readonly int[][] pieceCount = new int[2][];
+        private readonly int[][] pieceCount = new int[ColorC.COLOR_NB][];
 
         // Helper templates used to detect a given material distribution
 #if AGGR_INLINE

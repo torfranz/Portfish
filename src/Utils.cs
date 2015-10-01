@@ -39,65 +39,65 @@ namespace Portfish
 
         #region Fields
 
-        internal static readonly ulong[] RMasks = new ulong[64];
+        internal static readonly ulong[] RMasks = new ulong[SquareC.SQUARE_NB];
 
-        internal static readonly ulong[] RMagics = new ulong[64];
+        internal static readonly ulong[] RMagics = new ulong[SquareC.SQUARE_NB];
 
-        internal static readonly ulong[][] RAttacks = new ulong[64][];
+        internal static readonly ulong[][] RAttacks = new ulong[SquareC.SQUARE_NB][];
 
-        internal static readonly int[] RShifts = new int[64];
+        internal static readonly int[] RShifts = new int[SquareC.SQUARE_NB];
 
-        internal static readonly ulong[] BMasks = new ulong[64];
+        internal static readonly ulong[] BMasks = new ulong[SquareC.SQUARE_NB];
 
-        internal static readonly ulong[] BMagics = new ulong[64];
+        internal static readonly ulong[] BMagics = new ulong[SquareC.SQUARE_NB];
 
-        internal static readonly ulong[][] BAttacks = new ulong[64][];
+        internal static readonly ulong[][] BAttacks = new ulong[SquareC.SQUARE_NB][];
 
-        internal static readonly int[] BShifts = new int[64];
+        internal static readonly int[] BShifts = new int[SquareC.SQUARE_NB];
 
         internal static readonly ulong[] occupancy = new ulong[4096];
 
         internal static readonly ulong[] reference = new ulong[4096];
 
-        internal static readonly ulong[] SquareBB = new ulong[64];
+        internal static readonly ulong[] SquareBB = new ulong[SquareC.SQUARE_NB];
 
-        internal static readonly ulong[] FileBB = new ulong[8];
+        internal static readonly ulong[] FileBB = new ulong[FileC.FILE_NB];
 
-        internal static readonly ulong[] RankBB = new ulong[8];
+        internal static readonly ulong[] RankBB = new ulong[RankC.RANK_NB];
 
-        internal static readonly ulong[] AdjacentFilesBB = new ulong[8];
+        internal static readonly ulong[] AdjacentFilesBB = new ulong[FileC.FILE_NB];
 
-        internal static readonly ulong[] ThisAndAdjacentFilesBB = new ulong[8];
+        internal static readonly ulong[] ThisAndAdjacentFilesBB = new ulong[FileC.FILE_NB];
 
-        internal static readonly ulong[][] InFrontBB = new ulong[2][]; // 2,8
+        internal static readonly ulong[][] InFrontBB = new ulong[ColorC.COLOR_NB][]; // 2,8
 
-        internal static readonly ulong[][] ForwardBB = new ulong[2][]; // 2,64
+        internal static readonly ulong[][] ForwardBB = new ulong[ColorC.COLOR_NB][]; // 2,64
 
-        internal static readonly ulong[][] PassedPawnMask = new ulong[2][]; // 2,64
+        internal static readonly ulong[][] PassedPawnMask = new ulong[ColorC.COLOR_NB][]; // 2,64
 
-        internal static readonly ulong[][] AttackSpanMask = new ulong[2][]; // 2,64
+        internal static readonly ulong[][] AttackSpanMask = new ulong[ColorC.COLOR_NB][]; // 2,64
 
-        internal static readonly ulong[][] BetweenBB = new ulong[64][]; // 64, 64
+        internal static readonly ulong[][] BetweenBB = new ulong[SquareC.SQUARE_NB][]; // 64, 64
 
-        internal static readonly ulong[][] DistanceRingsBB = new ulong[64][]; //64, 8
+        internal static readonly ulong[][] DistanceRingsBB = new ulong[SquareC.SQUARE_NB][]; //64, 8
         
-        internal static readonly ulong[][] StepAttacksBB = new ulong[16][]; // 16, 64
+        internal static readonly ulong[][] StepAttacksBB = new ulong[PieceC.PIECE_NB][]; // 16, 64
 
-        internal static readonly ulong[] StepAttacksBB_KING = new ulong[64]; // 64
+        internal static readonly ulong[] StepAttacksBB_KING = new ulong[SquareC.SQUARE_NB]; // 64
 
-        internal static readonly ulong[] StepAttacksBB_KNIGHT = new ulong[64]; // 64
+        internal static readonly ulong[] StepAttacksBB_KNIGHT = new ulong[SquareC.SQUARE_NB]; // 64
 
-        internal static readonly ulong[][] PseudoAttacks = new ulong[6][]; // 6, 64
+        internal static readonly ulong[][] PseudoAttacks = new ulong[PieceTypeC.PIECE_TYPE_NB][]; // 6, 64
 
-        internal static readonly ulong[] PseudoAttacks_ROOK = new ulong[64]; // 64
+        internal static readonly ulong[] PseudoAttacks_ROOK = new ulong[SquareC.SQUARE_NB]; // 64
+        
+        internal static readonly ulong[] PseudoAttacks_BISHOP = new ulong[SquareC.SQUARE_NB]; // 64
 
-        internal static readonly ulong[] PseudoAttacks_BISHOP = new ulong[64]; // 64
+        internal static readonly ulong[] PseudoAttacks_QUEEN = new ulong[SquareC.SQUARE_NB]; // 64
 
-        internal static readonly ulong[] PseudoAttacks_QUEEN = new ulong[64]; // 64
+        internal static readonly int[] BSFTable = new int[SquareC.SQUARE_NB];
 
-        internal static readonly int[] BSFTable = new int[64];
-
-        internal static readonly int[][] SquareDistance = new int[64][]; // 64, 64
+        internal static readonly int[][] SquareDistance = new int[SquareC.SQUARE_NB][]; // 64, 64
 
         internal static readonly int[] MS1BTable = new int[256];
 
@@ -125,7 +125,7 @@ namespace Portfish
         internal static readonly RKISS rk = new RKISS();
 
         internal static readonly char[] _pieces = " PNBRQK".ToCharArray();
-        internal static readonly char[] PieceToChar = " PNBRQK  pnbrqk".ToCharArray();
+        internal static readonly string[] PieceToChar = { "PNBRQK", "pnbrqk" };
 
         internal const ulong DeBruijn_64 = 0x3F79D71B4CB0A89UL;
         internal const uint DeBruijn_32 = 0x783A9B23;
@@ -163,8 +163,8 @@ namespace Portfish
                 ThisAndAdjacentFilesBB[f] = FileBB[f] | AdjacentFilesBB[f];
             }
 
-            InFrontBB[ColorC.WHITE] = new ulong[8];
-            InFrontBB[ColorC.BLACK] = new ulong[8];
+            InFrontBB[ColorC.WHITE] = new ulong[RankC.RANK_NB];
+            InFrontBB[ColorC.BLACK] = new ulong[RankC.RANK_NB];
             for (var r = RankC.RANK_1; r < RankC.RANK_8; r++)
             {
                 InFrontBB[ColorC.WHITE][r] = ~(InFrontBB[ColorC.BLACK][r + 1] = InFrontBB[ColorC.BLACK][r] | RankBB[r]);
@@ -172,9 +172,9 @@ namespace Portfish
 
             for (var c = ColorC.WHITE; c <= ColorC.BLACK; c++)
             {
-                ForwardBB[c] = new ulong[64];
-                PassedPawnMask[c] = new ulong[64];
-                AttackSpanMask[c] = new ulong[64];
+                ForwardBB[c] = new ulong[SquareC.SQUARE_NB];
+                PassedPawnMask[c] = new ulong[SquareC.SQUARE_NB];
+                AttackSpanMask[c] = new ulong[SquareC.SQUARE_NB];
                 for (var s = SquareC.SQ_A1; s <= SquareC.SQ_H8; s++)
                 {
                     ForwardBB[c][s] = InFrontBB[c][rank_of(s)] & FileBB[file_of(s)];
@@ -227,7 +227,7 @@ namespace Portfish
                 for (var pt = PieceTypeC.PAWN; pt <= PieceTypeC.KING; pt++)
                 {
                     var piece = make_piece(c, pt);
-                    StepAttacksBB[piece] = new ulong[64];
+                    StepAttacksBB[piece] = new ulong[SquareC.SQUARE_NB];
                     for (var s = SquareC.SQ_A1; s <= SquareC.SQ_H8; s++)
                     {
                         for (var k = 0; k < steps[pt].Length; k++)
@@ -1161,7 +1161,7 @@ namespace Portfish
             string move = square_to_string(from) + square_to_string(to);
             if (type_of_move(m) == MoveTypeC.PROMOTION)
             {
-                move += PieceToChar[make_piece(ColorC.BLACK, promotion_type(m))]; // Lower case
+                move += PieceToChar[ColorC.BLACK][make_piece(ColorC.BLACK, promotion_type(m))]; // Lower case
             }
 
             return move;
@@ -1222,7 +1222,7 @@ namespace Portfish
             {
                 if (pt != PieceTypeC.PAWN)
                 {
-                    san.Append(PieceToChar[pt].ToString()); // Upper case
+                    san.Append(PieceToChar[ColorC.WHITE][pt]); // Upper case
 
                     // Disambiguation if we have more then one piece with destination 'to'
                     // note that for pawns is not needed because starting file is explicit.
@@ -1284,7 +1284,7 @@ namespace Portfish
                 if (type_of_move(m) == MoveTypeC.PROMOTION)
                 {
                     san.Append('=');
-                    san.Append(PieceToChar[promotion_type(m)]);
+                    san.Append(PieceToChar[ColorC.WHITE][promotion_type(m)]);
                 }
             }
 
