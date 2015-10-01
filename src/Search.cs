@@ -1389,7 +1389,7 @@ namespace Portfish
                 CheckInfoBroker.Free();
                 MovePickerBroker.Free(mp);
                 MovesSearchedBroker.Free();
-                return (excludedMove != 0) ? alpha : inCheck ? Utils.mated_in(ss[ssPos].ply) : ValueC.VALUE_DRAW;
+                return (excludedMove != 0) ? alpha : inCheck ? Utils.mated_in(ss[ssPos].ply) : DrawValue[pos.sideToMove];
             }
 
             // If we have pruned all the moves without searching return a fail-low score
