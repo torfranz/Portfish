@@ -410,7 +410,7 @@ namespace Portfish
                 goto finalize;
             }
 
-            if (bool.Parse(OptionMap.Instance["Contempt Factor"].v) && !bool.Parse(OptionMap.Instance["UCI_AnalyseMode"].v))
+            if (int.Parse(OptionMap.Instance["Contempt Factor"].v) != 0 && !bool.Parse(OptionMap.Instance["UCI_AnalyseMode"].v))
             {
                 int cf = int.Parse(OptionMap.Instance["Contempt Factor"].v) * Constants.PawnValueMidgame / 100; // In centipawns
                 cf = cf * e.game_phase() / PhaseC.PHASE_MIDGAME; // Scale down with phase
@@ -818,6 +818,8 @@ namespace Portfish
                             : ttValue >= beta ? ((tte.type() & Bound.BOUND_LOWER) != 0 )
                                               : ((tte.type() & Bound.BOUND_UPPER) != 0)))
             {
+                Debug.Assert(ttValue != ValueC.VALUE_NONE); // Due to depth > DEPTH_NONE
+
                 TT.entries[ttePos].set_generation(TT.generation);
                 ss[ssPos].currentMove = ttMove; // Can be MOVE_NONE
 
@@ -1159,6 +1161,8 @@ namespace Portfish
                 // a margin then we extend ttMove.
                 if (singularExtensionNode && (ext == 0) && move == ttMove && pos.pl_move_is_legal(move, ci.pinned))
                 {
+                    Debug.Assert(ttValue != ValueC.VALUE_NONE);
+
                     var rBeta = ttValue - depth;
                     ss[ssPos].excludedMove = move;
                     ss[ssPos].skipNullMove = 1;
@@ -1496,6 +1500,8 @@ namespace Portfish
                             : ttValue >= beta ? ((tte.type() & Bound.BOUND_LOWER) != 0)
                                               : ((tte.type() & Bound.BOUND_UPPER) != 0)))
             {
+                Debug.Assert(ttValue != ValueC.VALUE_NONE); // Due to depth > DEPTH_NONE
+
                 ss[ssPos].currentMove = ttMove; // Can be MOVE_NONE
                 return ttValue;
             }
@@ -1812,17 +1818,10 @@ namespace Portfish
 
         private static int value_to_tt(int v, int ply)
         {
-            if (v >= ValueC.VALUE_MATE_IN_MAX_PLY)
-            {
-                return v + ply;
-            }
+            Debug.Assert(v != ValueC.VALUE_NONE); 
 
-            if (v <= ValueC.VALUE_MATED_IN_MAX_PLY)
-            {
-                return v - ply;
-            }
-
-            return v;
+            return v >= ValueC.VALUE_MATE_IN_MAX_PLY ? v + ply
+                 : v <= ValueC.VALUE_MATED_IN_MAX_PLY ? v - ply : v;
         }
 
         // value_from_tt() is the inverse of value_to_tt(): It adjusts a mate score
@@ -1834,17 +1833,9 @@ namespace Portfish
 
         private static int value_from_tt(int v, int ply)
         {
-            if (v >= ValueC.VALUE_MATE_IN_MAX_PLY)
-            {
-                return v - ply;
-            }
-
-            if (v <= ValueC.VALUE_MATED_IN_MAX_PLY)
-            {
-                return v + ply;
-            }
-
-            return v;
+            return v == ValueC.VALUE_NONE ? ValueC.VALUE_NONE
+                 : v >= ValueC.VALUE_MATE_IN_MAX_PLY ? v - ply
+                 : v <= ValueC.VALUE_MATED_IN_MAX_PLY ? v + ply : v;
         }
 
         // connected_threat() tests whether it is safe to forward prune a move or if
@@ -1890,9 +1881,12 @@ namespace Portfish
         }
 
         // refine_eval() returns the transposition table score if possible, otherwise
-        // falls back on static position evaluation.
+        // falls back on static position evaluation. Note that we never return VALUE_NONE
+        // even if v == VALUE_NONE.
         private static int refine_eval(TTEntry tte, int v, int defaultEval)
         {
+            Debug.Assert(v !=ValueC. VALUE_NONE || tte.type() == Bound.BOUND_NONE);
+
             if ((((tte.type() & Bound.BOUND_LOWER) != 0) && v >= defaultEval)
                 || (((tte.type() & Bound.BOUND_UPPER) != 0) && v < defaultEval))
             {
