@@ -128,7 +128,7 @@ namespace Portfish
             while (TT.probe(pos.key(), ref ttePos, out tte) && (m = tte.move()) != MoveC.MOVE_NONE
                    // Local copy, TT entry could change
                    && pos.is_pseudo_legal(m) && pos.pl_move_is_legal(m, pos.pinned_pieces()) && ply < Constants.MAX_PLY
-                   && (!pos.is_draw(false) || ply < 2))
+                   && (!pos.is_draw(false, true) || ply < 2))
             {
                 this.pv.Add(m);
                 pos.do_move(m, sia.state[stPos++]);
@@ -835,7 +835,7 @@ finalize:
             if (!RootNode)
             {
                 // Step 2. Check for aborted search and immediate draw
-                if ((SignalsStop || pos.is_draw(false) || ss[ssPos].ply > Constants.MAX_PLY))
+                if ((SignalsStop || pos.is_draw(false, true) || ss[ssPos].ply > Constants.MAX_PLY))
                 {
                     MovesSearchedBroker.Free();
                     return DrawValue[pos.sideToMove];
@@ -853,6 +853,13 @@ finalize:
                 {
                     MovesSearchedBroker.Free();
                     return alpha;
+                }
+                else
+                {
+                    if (pos.is_draw(false, false))
+                    {
+                        return DrawValue[pos.sideToMove];
+                    }
                 }
             }
 
@@ -1560,7 +1567,7 @@ finalize:
             ss[ssPos].ply = ss[ssPos - 1].ply + 1;
 
             // Check for an instant draw or maximum ply reached
-            if (pos.is_draw(true) || ss[ssPos].ply > Constants.MAX_PLY)
+            if (pos.is_draw(true, true) || ss[ssPos].ply > Constants.MAX_PLY)
             {
                 return DrawValue[pos.sideToMove];
             }

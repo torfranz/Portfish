@@ -2330,7 +2330,7 @@ namespace Portfish
         /// is_draw() tests whether the position is drawn by material,
         /// repetition, or the 50 moves rule. It does not detect stalemates, this
         /// must be done by the search.
-        internal bool is_draw(bool SkipRepetition)
+        internal bool is_draw(bool SkipRepetition, bool SkipThreeFoldCheck)
         {
             // Draw by material?
             if ((this.byTypeBB[PieceTypeC.PAWN] == 0)
@@ -2361,7 +2361,7 @@ namespace Portfish
             // Draw by repetition?
             if (!SkipRepetition)
             {
-                int i = 4, e = Math.Min(this.st.rule50, this.st.pliesFromNull);
+                int i = 4, e = Math.Min(this.st.rule50, this.st.pliesFromNull), rep_count = 0;
                 if (i <= e)
                 {
                     var stp = this.st.previous.previous;
@@ -2370,7 +2370,14 @@ namespace Portfish
                         stp = stp.previous.previous;
                         if (stp.key == this.st.key)
                         {
-                            return true;
+                            if (SkipThreeFoldCheck)
+                            {
+                                return true;
+                            }
+                            else if (++rep_count >= 2)
+                            {
+                                return true;
+                            }
                         }
                         i += 2;
                     }
