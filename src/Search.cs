@@ -1222,7 +1222,7 @@ finalize:
                 // (alpha-s, beta-s), and just one fails high on (alpha, beta), then that move
                 // is singular and should be extended. To verify this we do a reduced search
                 // on all the other moves but the ttMove, if result is lower than ttValue minus
-                // a margin then we extend ttMove.
+                // a margin then we extend ttreMove.
                 if (singularExtensionNode && move == ttMove && (ext == 0) && pos.pl_move_is_legal(move, ci.pinned))
                 {
                     Debug.Assert(ttValue != ValueC.VALUE_NONE);
@@ -1364,7 +1364,25 @@ finalize:
                 // was aborted because the user interrupted the search or because we
                 // ran out of time. In this case, the return value of the search cannot
                 // be trusted, and we don't update the best move and/or PV.
-                if (RootNode && !SignalsStop)
+                if (SignalsStop || thisThread.cutoff_occurred())
+                {
+                    if (st != null)
+                    {
+                        st.previous = null;
+                        StateInfoBroker.Free();
+                    }
+                    CheckInfoBroker.Free();
+                    MovePickerBroker.Free(mp);
+                    MovesSearchedBroker.Free();
+
+                    return value; // To avoid returning VALUE_INFINITE
+                }
+
+                // Finished searching the move. If Signals.stop is true, the search
+                // was aborted because the user interrupted the search or because we
+                // ran out of time. In this case, the return value of the search cannot
+                // be trusted, and we don't update the best move and/or PV.
+                if (RootNode)
                 {
                     var rmPos = find(RootMoves, 0, RootMoves.Count, move);
 
