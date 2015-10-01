@@ -746,8 +746,6 @@ namespace Portfish
                 ttMove = excludedMove = MoveC.MOVE_NONE;
                 ttValue = ValueC.VALUE_NONE;
 
-                ////moveCount = sp.moveCount; // Lock must be held here
-
                 Debug.Assert(sp.bestValue > -ValueC.VALUE_INFINITE && sp.moveCount > 0);
 
                 goto split_point_start;
@@ -1645,6 +1643,13 @@ namespace Portfish
                             TT.store(posKey, value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, 
                                 ttDepth, move, ss[ssPos].eval, ss[ssPos].evalMargin);
 
+                            if (st != null)
+                            {
+                                st.previous = null;
+                                StateInfoBroker.Free();
+                            }
+                            CheckInfoBroker.Free();
+                            MovePickerBroker.Free(mp);
                             return value;
                         }
                     }
