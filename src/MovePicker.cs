@@ -184,15 +184,15 @@ namespace Portfish
                 this.ms[Constants.MAX_MOVES + 1].move = ss.killers1;
 
                 // Consider sligtly negative captures as good if at low depth and far from beta
-                if (ss.eval < beta - Constants.PawnValueMidgame && d < 3 * DepthC.ONE_PLY)
+                if (ss.staticEval < beta - Constants.PawnValueMidgame && d < 3 * DepthC.ONE_PLY)
                 {
                     this.captureThreshold = -Constants.PawnValueMidgame;
                 }
 
                 // Consider negative captures as good if still enough to reach beta
-                else if (ss.eval > beta)
+                else if (ss.staticEval > beta)
                 {
-                    this.captureThreshold = beta - ss.eval;
+                    this.captureThreshold = beta - ss.staticEval;
                 }
             }
 

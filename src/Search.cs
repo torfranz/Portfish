@@ -44,7 +44,7 @@ namespace Portfish
 
         internal int reduction;
 
-        internal int eval;
+        internal int staticEval;
 
         internal int evalMargin;
 
@@ -740,7 +740,7 @@ namespace Portfish
             int ttMove, move, excludedMove, bestMove, threatMove;
             int ext, newDepth;
             int bestValue, value, ttValue;
-            int refinedValue, nullValue, futilityValue;
+            int eval = 0, nullValue, futilityValue;
             bool inCheck, givesCheck, pvMove, singularExtensionNode;
             bool captureOrPromotion, dangerous, doFullDepthSearch;
             int moveCount = 0, playedMoveCount = 0;
@@ -839,39 +839,47 @@ namespace Portfish
             // Step 5. Evaluate the position statically and update parent's gain statistics
             if (inCheck)
             {
-                ss[ssPos].eval = ss[ssPos].evalMargin = refinedValue = ValueC.VALUE_NONE;
+                ss[ssPos].staticEval = ss[ssPos].evalMargin = eval = ValueC.VALUE_NONE;
             }
             else if (tteHasValue)
             {
                 Debug.Assert(tte.static_value() != ValueC.VALUE_NONE);
-                ss[ssPos].eval = tte.static_value();
+                Debug.Assert(ttValue != ValueC.VALUE_NONE || tte.type() == Bound.BOUND_NONE);
+
+                ss[ssPos].staticEval = tte.static_value();
                 ss[ssPos].evalMargin = tte.static_value_margin();
-                refinedValue = refine_eval(tte, ttValue, ss[ssPos].eval);
+                
+                // Can ttValue be used as a better position evaluation?
+                if ((((tte.type() & Bound.BOUND_LOWER) != 0) && ttValue > eval)
+                    || (((tte.type() & Bound.BOUND_UPPER) != 0) && ttValue < eval))
+                {
+                    eval = ttValue;
+                }
             }
             else
             {
-                refinedValue = ss[ssPos].eval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
+                eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                 TT.store(
                     posKey,
                     ValueC.VALUE_NONE,
                     Bound.BOUND_NONE,
                     DepthC.DEPTH_NONE,
                     MoveC.MOVE_NONE,
-                    ss[ssPos].eval,
+                    ss[ssPos].staticEval,
                     ss[ssPos].evalMargin);
             }
 
             // Update gain for the parent non-capture move given the static position
             // evaluation before and after the move.
-            if ((move = ss[ssPos - 1].currentMove) != MoveC.MOVE_NULL && ss[ssPos - 1].eval != ValueC.VALUE_NONE
-                && ss[ssPos].eval != ValueC.VALUE_NONE && (pos.captured_piece_type() == 0) && Utils.type_of_move(move) == MoveTypeC.NORMAL)
+            if ((move = ss[ssPos - 1].currentMove) != MoveC.MOVE_NULL && ss[ssPos - 1].staticEval != ValueC.VALUE_NONE
+                && ss[ssPos].staticEval != ValueC.VALUE_NONE && (pos.captured_piece_type() == 0) && Utils.type_of_move(move) == MoveTypeC.NORMAL)
             {
                 var to = Utils.to_sq(move);
-                H.update_gain(pos.piece_on(to), to, -ss[ssPos - 1].eval - ss[ssPos].eval);
+                H.update_gain(pos.piece_on(to), to, -ss[ssPos - 1].staticEval - ss[ssPos].staticEval);
             }
 
             // Step 6. Razoring (is omitted in PV nodes)
-            if (!PvNode && !inCheck && depth < 4 * DepthC.ONE_PLY && refinedValue + razor_margin(depth) < beta
+            if (!PvNode && !inCheck && depth < 4 * DepthC.ONE_PLY && eval + razor_margin(depth) < beta
                 && ttMove == MoveC.MOVE_NONE && Math.Abs(beta) < ValueC.VALUE_MATE_IN_MAX_PLY
                 && !pos.pawn_on_7th(pos.sideToMove))
             {
@@ -890,15 +898,15 @@ namespace Portfish
             // We're betting that the opponent doesn't have a move that will reduce
             // the score by more than futility_margin(depth) if we do a null move.
             if (!PvNode && !inCheck && (ss[ssPos].skipNullMove == 0) && depth < 4 * DepthC.ONE_PLY
-                && Math.Abs(beta) < ValueC.VALUE_MATE_IN_MAX_PLY && refinedValue - FutilityMargins[depth][0] >= beta
+                && Math.Abs(beta) < ValueC.VALUE_MATE_IN_MAX_PLY && eval - FutilityMargins[depth][0] >= beta
                 && (pos.non_pawn_material(pos.sideToMove) != 0))
             {
                 MovesSearchedBroker.Free();
-                return refinedValue - FutilityMargins[depth][0];
+                return eval - FutilityMargins[depth][0];
             }
 
             // Step 8. Null move search with verification search (is omitted in PV nodes)
-            if (!PvNode && !inCheck && (ss[ssPos].skipNullMove == 0) && depth > DepthC.ONE_PLY && refinedValue >= beta
+            if (!PvNode && !inCheck && (ss[ssPos].skipNullMove == 0) && depth > DepthC.ONE_PLY && eval >= beta
                 && Math.Abs(beta) < ValueC.VALUE_MATE_IN_MAX_PLY && (pos.non_pawn_material(pos.sideToMove) != 0))
             {
                 ss[ssPos].currentMove = MoveC.MOVE_NULL;
@@ -907,7 +915,7 @@ namespace Portfish
                 Depth R = 3 * DepthC.ONE_PLY + depth / 4;
 
                 // Null move dynamic reduction based on value
-                if (refinedValue - Constants.PawnValueMidgame > beta)
+                if (eval - Constants.PawnValueMidgame > beta)
                 {
                     R += DepthC.ONE_PLY;
                 }
@@ -1036,7 +1044,7 @@ namespace Portfish
 
             // Step 10. Internal iterative deepening
             if (ttMove == MoveC.MOVE_NONE && depth >= (PvNode ? 5 * DepthC.ONE_PLY : 8 * DepthC.ONE_PLY)
-                && (PvNode || (!inCheck && ss[ssPos].eval + 256 >= beta)))
+                && (PvNode || (!inCheck && ss[ssPos].staticEval + 256 >= beta)))
             {
                 var d = (PvNode ? depth - 2 * DepthC.ONE_PLY : depth / 2);
 
@@ -1201,7 +1209,7 @@ namespace Portfish
                     // We illogically ignore reduction condition depth >= 3*ONE_PLY for predicted depth,
                     // but fixing this made program slightly weaker.
                     var predictedDepth = newDepth - reduction(PvNode, depth, moveCount);
-                    futilityValue = ss[ssPos].eval + ss[ssPos].evalMargin + futility_margin(predictedDepth, moveCount)
+                    futilityValue = ss[ssPos].staticEval + ss[ssPos].evalMargin + futility_margin(predictedDepth, moveCount)
                                     + H.gain(pos.piece_moved(move), Utils.to_sq(move));
 
                     if (futilityValue < beta)
@@ -1409,7 +1417,7 @@ namespace Portfish
                     Bound.BOUND_LOWER,
                     depth,
                     bestMove,
-                    ss[ssPos].eval,
+                    ss[ssPos].staticEval,
                     ss[ssPos].evalMargin);
 
                 if (!pos.is_capture_or_promotion(bestMove) && !inCheck)
@@ -1434,7 +1442,7 @@ namespace Portfish
             }
             else // Failed low or PV search
             {
-                TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, depth, bestMove, ss[ssPos].eval, ss[ssPos].evalMargin);
+                TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, depth, bestMove, ss[ssPos].staticEval, ss[ssPos].evalMargin);
             }
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
@@ -1511,7 +1519,7 @@ namespace Portfish
             // Evaluate the position statically
             if (inCheck)
             {
-                ss[ssPos].eval = ss[ssPos].evalMargin = ValueC.VALUE_NONE;
+                ss[ssPos].staticEval = ss[ssPos].evalMargin = ValueC.VALUE_NONE;
                 bestValue = futilityBase = -ValueC.VALUE_INFINITE;
                 enoughMaterial = false;
             }
@@ -1520,12 +1528,12 @@ namespace Portfish
                 if (tteHasValue)
                 {
                     Debug.Assert(tte.static_value() != ValueC.VALUE_NONE);
-                    ss[ssPos].eval = bestValue = tte.static_value();
+                    ss[ssPos].staticEval = bestValue = tte.static_value();
                     ss[ssPos].evalMargin = tte.static_value_margin();
                 }
                 else
                 {
-                    ss[ssPos].eval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
+                    ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                 }
 
                 // Stand pat. Return immediately if static value is at least beta
@@ -1539,7 +1547,7 @@ namespace Portfish
                             Bound.BOUND_LOWER,
                             DepthC.DEPTH_NONE,
                             MoveC.MOVE_NONE,
-                            ss[ssPos].eval,
+                            ss[ssPos].staticEval,
                             ss[ssPos].evalMargin);
                     }
 
@@ -1551,7 +1559,7 @@ namespace Portfish
                     alpha = bestValue;
                 }
 
-                futilityBase = ss[ssPos].eval + ss[ssPos].evalMargin + 128;
+                futilityBase = ss[ssPos].staticEval + ss[ssPos].evalMargin + 128;
                 enoughMaterial = (pos.sideToMove == 0 ? pos.st.npMaterialWHITE : pos.st.npMaterialBLACK)
                                  > Constants.RookValueMidgame;
             }
@@ -1621,7 +1629,7 @@ namespace Portfish
                     && givesCheck 
                     && move != ttMove
                     && !pos.is_capture_or_promotion(move)
-                    && ss[ssPos].eval + Constants.PawnValueMidgame / 4 < beta
+                    && ss[ssPos].staticEval + Constants.PawnValueMidgame / 4 < beta
                     && !check_is_dangerous(pos, move, futilityBase, beta))
                 {
                     continue;
@@ -1661,7 +1669,7 @@ namespace Portfish
                         else // Fail high
                         {
                             TT.store(posKey, value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, 
-                                ttDepth, move, ss[ssPos].eval, ss[ssPos].evalMargin);
+                                ttDepth, move, ss[ssPos].staticEval, ss[ssPos].evalMargin);
 
                             if (st != null)
                             {
@@ -1692,7 +1700,7 @@ namespace Portfish
 
             TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), 
                     PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
-                    ttDepth, bestMove, ss[ssPos].eval, ss[ssPos].evalMargin);
+                    ttDepth, bestMove, ss[ssPos].staticEval, ss[ssPos].evalMargin);
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
 
@@ -1880,22 +1888,6 @@ namespace Portfish
             }
 
             return false;
-        }
-
-        // refine_eval() returns the transposition table score if possible, otherwise
-        // falls back on static position evaluation. Note that we never return VALUE_NONE
-        // even if v == VALUE_NONE.
-        private static int refine_eval(TTEntry tte, int v, int defaultEval)
-        {
-            Debug.Assert(v !=ValueC. VALUE_NONE || tte.type() == Bound.BOUND_NONE);
-
-            if ((((tte.type() & Bound.BOUND_LOWER) != 0) && v >= defaultEval)
-                || (((tte.type() & Bound.BOUND_UPPER) != 0) && v < defaultEval))
-            {
-                return v;
-            }
-
-            return defaultEval;
         }
 
         // pv_info_to_uci() sends search info to GUI. UCI protocol requires to send all

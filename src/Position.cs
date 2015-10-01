@@ -2203,6 +2203,11 @@ namespace Portfish
                     this.pieceList[0][i][j] = this.pieceList[1][i][j] = SquareC.SQ_NONE;
                 }
             }
+
+            for (var sq = SquareC.SQ_A1; sq <= SquareC.SQ_H8; sq++)
+            {
+                this.board[sq] = PieceC.NO_PIECE;
+            }
         }
 
         /// put_piece() puts a piece on the given square of the board,
