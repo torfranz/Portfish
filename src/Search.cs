@@ -213,8 +213,6 @@ namespace Portfish
 
         internal Move pick_move()
         {
-            Debug.Assert(Search.MultiPV > 1);
-
             // PRNG sequence should be not deterministic
             for (var i = Math.Abs(DateTime.Now.Millisecond % 50); i > 0; i--)
             {
@@ -222,8 +220,7 @@ namespace Portfish
             }
 
             // RootMoves are already sorted by score in descending order
-            var size = Math.Min(Search.MultiPV, Search.RootMoves.Count);
-            var variance = Math.Min(Search.RootMoves[0].score - Search.RootMoves[size - 1].score, Constants.PawnValueMidgame);
+            var variance = Math.Min(Search.RootMoves[0].score - Search.RootMoves[Search.PVSize - 1].score, Constants.PawnValueMidgame);
             var weakness = 120 - 2 * level;
             var max_s = -ValueC.VALUE_INFINITE;
             best = MoveC.MOVE_NONE;
@@ -231,7 +228,7 @@ namespace Portfish
             // Choose best move. For each move score we add two terms both dependent on
             // weakness, one deterministic and bigger for weaker moves, and one random,
             // then we choose the move with the resulting highest score.
-            for (var i = 0; i < size; i++)
+            for (var i = 0; i < Search.PVSize; i++)
             {
                 var s = Search.RootMoves[i].score;
 
@@ -331,11 +328,9 @@ namespace Portfish
         private const int TimerResolution = 5;
 
         /// Namespace variables
-        internal static int MultiPV, UCIMultiPV, PVIdx; // was UInt64
+        internal static int PVSize, PVIdx; // was UInt64
 
         private static int BestMoveChanges;
-
-        private static bool Chess960;
 
         private static readonly History H = new History();
 
@@ -465,7 +460,7 @@ namespace Portfish
         internal static void think()
         {
             var pos = RootPosition;
-            Chess960 = pos.chess960;
+            
             //SearchTime.Restart();
             Search.RootColor = pos.sideToMove;
 
@@ -556,9 +551,9 @@ finalize:
 
             // Best move could be MOVE_NONE when searching on a stalemate position
             Plug.Write("bestmove ");
-            Plug.Write(Utils.move_to_uci(RootMoves[0].pv[0], Chess960));
+            Plug.Write(Utils.move_to_uci(RootMoves[0].pv[0], pos.chess960));
             Plug.Write(" ponder ");
-            Plug.Write(Utils.move_to_uci(RootMoves[0].pv[1], Chess960));
+            Plug.Write(Utils.move_to_uci(RootMoves[0].pv[1], pos.chess960));
             Plug.Write(Constants.endl);
         }
 
@@ -579,13 +574,18 @@ finalize:
             bestValue = delta = -ValueC.VALUE_INFINITE;
             ss[ssPos].currentMove = MoveC.MOVE_NULL;
 
-            UCIMultiPV = int.Parse(OptionMap.Instance["MultiPV"].v);
+            PVSize = int.Parse(OptionMap.Instance["MultiPV"].v);
             using (var skill = new Skill(int.Parse(OptionMap.Instance["Skill Level"].v)))
             {
 
-                // Do we have to play with skill handicap? In this case enable MultiPV that
-                // we will use behind the scenes to retrieve a set of possible moves.
-                MultiPV = skill.enabled() ? Math.Max(UCIMultiPV, 4) : UCIMultiPV;
+                // Do we have to play with skill handicap? In this case enable MultiPV search
+                // that we will use behind the scenes to retrieve a set of possible moves.
+                if (skill.enabled() && PVSize < 4)
+                {
+                    PVSize = 4;
+                }
+                
+                PVSize = Math.Min(PVSize, RootMoves.Count);
 
                 // Iterative deepening loop until requested to stop or target depth reached
                 while (++depth <= Constants.MAX_PLY && !SignalsStop && ((Limits.depth == 0) || depth <= Limits.depth))
@@ -597,11 +597,11 @@ finalize:
                         RootMoves[i].prevScore = RootMoves[i].score;
                     }
 
-                    prevBestMoveChanges = BestMoveChanges;
+                    prevBestMoveChanges = BestMoveChanges; // Only sensible when PVSize == 1
                     BestMoveChanges = 0;
 
                     // MultiPV loop. We perform a full root search for each PV line
-                    for (PVIdx = 0; PVIdx < Math.Min(MultiPV, RootMoves.Count); PVIdx++)
+                    for (PVIdx = 0; PVIdx < PVSize; PVIdx++)
                     {
                         // Set aspiration window default width
                         if (depth >= 5 && Math.Abs(RootMoves[PVIdx].prevScore) < ValueC.VALUE_KNOWN_WIN)
@@ -707,7 +707,7 @@ finalize:
                         var stop = false; // Local variable, not the volatile Signals.stop
 
                         // Take in account some extra time if the best move has changed
-                        if (depth > 4 && depth < 50)
+                        if (depth > 4 && depth < 50 && PVSize == 1)
                         {
                             TimeMgr.pv_instability(BestMoveChanges, prevBestMoveChanges);
                         }
@@ -721,7 +721,9 @@ finalize:
                         }
 
                         // Stop search early if one move seems to be much better than others
-                        if (depth >= 12 && !stop
+                        if (depth >= 12 
+                            && !stop
+                            && PVSize == 1
                             && ((bestMoveNeverChanged && (pos.captured_piece_type() != 0))
                                 || SearchTime.ElapsedMilliseconds > (TimeMgr.available_time() * 40) / 100))
                         {
@@ -1186,7 +1188,7 @@ finalize:
                         Plug.Write("info depth ");
                         Plug.Write((depth / DepthC.ONE_PLY).ToString());
                         Plug.Write(" currmove ");
-                        Plug.Write(Utils.move_to_uci(move, Chess960));
+                        Plug.Write(Utils.move_to_uci(move, pos.chess960));
                         Plug.Write(" nodes ");
                         Plug.Write(pos.nodes.ToString());
                         Plug.Write(" currmovenumber ");
@@ -1377,7 +1379,7 @@ finalize:
                         // We record how often the best move has been changed in each
                         // iteration. This information is used for time management: When
                         // the best move changes frequently, we allocate some more time.
-                        if (!pvMove && MultiPV == 1)
+                        if (!pvMove)
                         {
                             BestMoveChanges++;
                         }
@@ -1960,7 +1962,7 @@ finalize:
                 }
             }
 
-            for (var i = 0; i < Math.Min(UCIMultiPV, RootMoves.Count); i++)
+            for (var i = 0; i < Math.Min(int.Parse(OptionMap.Instance["MultiPV"].v), RootMoves.Count); i++)
             {
                 var updated = (i <= PVIdx);
 
@@ -1975,7 +1977,7 @@ finalize:
 
                 for (var j = 0; RootMoves[i].pv[j] != MoveC.MOVE_NONE; j++)
                 {
-                    s.Append(" ").Append(Utils.move_to_uci(RootMoves[i].pv[j], Chess960));
+                    s.Append(" ").Append(Utils.move_to_uci(RootMoves[i].pv[j], pos.chess960));
                 }
 
                 Plug.Write("info depth ");
