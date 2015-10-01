@@ -1161,7 +1161,7 @@ namespace Portfish
             string move = square_to_string(from) + square_to_string(to);
             if (type_of_move(m) == MoveTypeC.PROMOTION)
             {
-                move += PieceToChar[ColorC.BLACK][make_piece(ColorC.BLACK, promotion_type(m))]; // Lower case
+                move += PieceToChar[ColorC.BLACK][promotion_type(m)]; // Lower case
             }
 
             return move;
