@@ -261,6 +261,8 @@ namespace Portfish
 
         private static int SkillLevel;
 
+        private static Move skillBest;
+
         private static bool SkillLevelEnabled, Chess960;
 
         private static readonly History H = new History();
@@ -446,6 +448,7 @@ namespace Portfish
             // Do we have to play with skill handicap? In this case enable MultiPV that
             // we will use behind the scenes to retrieve a set of possible moves.
             SkillLevelEnabled = (SkillLevel < 20);
+            skillBest = MoveC.MOVE_NONE;
             MultiPV = (SkillLevelEnabled ? Math.Max(UCIMultiPV, 4) : UCIMultiPV);
 
             var ttSize = uint.Parse(OptionMap.Instance["Hash"].v);
@@ -478,6 +481,20 @@ namespace Portfish
             Threads.set_timer(0); // Stop timer
             Threads.sleep();
 
+            // When using skills swap best PV line with the sub-optimal one
+            if (SkillLevelEnabled)
+            {
+                if (skillBest == MoveC.MOVE_NONE) // Still unassigned ?
+                {
+                    skillBest = do_skill_level();
+                }
+
+                var bestpos = find(RootMoves, 0, RootMoves.Count, skillBest);
+                var temp = RootMoves[0];
+                RootMoves[0] = RootMoves[bestpos];
+                RootMoves[bestpos] = temp;
+            }
+
             finalize:
 
             // When we reach max depth we arrive here even without Signals.stop is raised,
@@ -508,14 +525,13 @@ namespace Portfish
             int depth, prevBestMoveChanges;
             int bestValue, alpha, beta, delta;
             var bestMoveNeverChanged = true;
-            var skillBest = MoveC.MOVE_NONE;
-
+            
             depth = BestMoveChanges = 0;
             bestValue = delta = -ValueC.VALUE_INFINITE;
             ss[ssPos].currentMove = MoveC.MOVE_NULL;
 
             // Iterative deepening loop until requested to stop or target depth reached
-            while (!SignalsStop && ++depth <= Constants.MAX_PLY && ((Limits.depth == 0) || depth <= Limits.depth))
+            while (++depth <= Constants.MAX_PLY && !SignalsStop && ((Limits.depth == 0) || depth <= Limits.depth))
             {
                 // Save last iteration's scores before first PV line is searched and all
                 // the move scores but the (new) PV are set to -VALUE_INFINITE.
@@ -560,15 +576,6 @@ namespace Portfish
                         Utils.sort(RootMoves, PVIdx, RootMoves.Count);
                         //sort<RootMove>(RootMoves.begin() + PVIdx, RootMoves.end());
 
-                        // In case we have found an exact score and we are going to leave
-                        // the fail high/low loop then reorder the PV moves, otherwise
-                        // leave the last PV move in its position so to be searched again.
-                        // Of course this is needed only in MultiPV search.
-                        if ((PVIdx != 0) && bestValue > alpha && bestValue < beta)
-                        {
-                            Utils.sort(RootMoves, 0, PVIdx);
-                        }
-
                         // Write PV back to transposition table in case the relevant
                         // entries have been overwritten during the search.
                         for (var i = 0; i <= PVIdx; i++)
@@ -576,46 +583,47 @@ namespace Portfish
                             RootMoves[i].insert_pv_in_tt(pos);
                         }
 
-                        // If search has been stopped exit the aspiration window loop.
-                        // Sorting and writing PV back to TT is safe becuase RootMoves
-                        // is still valid, although refers to previous iteration.
+                        // If search has been stopped return immediately. Sorting and
+                        // writing PV back to TT is safe becuase RootMoves is still
+                        // valid, although refers to previous iteration.
                         if (SignalsStop)
                         {
+                            LoopStackBroker.Free(ls);
+                            return;
+                        }
+
+                        // In case of failing high/low increase aspiration window and
+                        // research, otherwise sort multi-PV lines and exit the loop.
+                        if (bestValue > alpha && bestValue < beta)
+                        {
+                            Utils.sort(RootMoves, 0, PVIdx);
+                            pv_info_to_uci(pos, depth, alpha, beta);
                             break;
                         }
 
-                        // Send full PV info to GUI if we are going to leave the loop or
-                        // if we have a fail high/low and we are deep in the search.
-                        if ((bestValue > alpha && bestValue < beta) || SearchTime.ElapsedMilliseconds > 2000)
+                        // Give some update (without cluttering the UI) before to research
+                        if (SearchTime.ElapsedMilliseconds > 3000)
                         {
                             pv_info_to_uci(pos, depth, alpha, beta);
                         }
 
-                        // In case of failing high/low increase aspiration window and
-                        // research, otherwise exit the fail high/low loop.
-                        if (bestValue >= beta)
+                        if (Math.Abs(bestValue) >= ValueC.VALUE_KNOWN_WIN)
+                        {
+                            alpha = -ValueC.VALUE_INFINITE;
+                            beta = ValueC.VALUE_INFINITE;
+                        }
+                        else if (bestValue >= beta)
                         {
                             beta += delta;
                             delta += delta / 2;
                         }
-                        else if (bestValue <= alpha)
+                        else
                         {
                             SignalsFailedLowAtRoot = true;
                             SignalsStopOnPonderhit = false;
 
                             alpha -= delta;
                             delta += delta / 2;
-                        }
-                        else
-                        {
-                            break;
-                        }
-
-                        // Search with full window in case we have a win/mate score
-                        if (Math.Abs(bestValue) >= ValueC.VALUE_KNOWN_WIN)
-                        {
-                            alpha = -ValueC.VALUE_INFINITE;
-                            beta = ValueC.VALUE_INFINITE;
                         }
 
                         Debug.Assert(alpha >= -ValueC.VALUE_INFINITE && beta <= ValueC.VALUE_INFINITE);
@@ -635,7 +643,7 @@ namespace Portfish
                 }
 
                 // Do we have time for the next iteration? Can we stop searching now?
-                if (!SignalsStop && !SignalsStopOnPonderhit && Limits.use_time_management())
+                if (Limits.use_time_management() && !SignalsStopOnPonderhit)
                 {
                     var stop = false; // Local variable, not the volatile Signals.stop
 
@@ -692,20 +700,6 @@ namespace Portfish
                         }
                     }
                 }
-            }
-
-            // When using skills swap best PV line with the sub-optimal one
-            if (SkillLevelEnabled)
-            {
-                if (skillBest == MoveC.MOVE_NONE) // Still unassigned ?
-                {
-                    skillBest = do_skill_level();
-                }
-
-                var bestpos = find(RootMoves, 0, RootMoves.Count, skillBest);
-                var temp = RootMoves[0];
-                RootMoves[0] = RootMoves[bestpos];
-                RootMoves[bestpos] = temp;
             }
 
             LoopStackBroker.Free(ls);
@@ -1169,7 +1163,7 @@ namespace Portfish
                 // is singular and should be extended. To verify this we do a reduced search
                 // on all the other moves but the ttMove, if result is lower than ttValue minus
                 // a margin then we extend ttMove.
-                if (singularExtensionNode && (ext == 0) && move == ttMove && pos.pl_move_is_legal(move, ci.pinned))
+                if (singularExtensionNode && move == ttMove && (ext == 0) && pos.pl_move_is_legal(move, ci.pinned))
                 {
                     Debug.Assert(ttValue != ValueC.VALUE_NONE);
 
