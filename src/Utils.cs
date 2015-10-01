@@ -125,7 +125,7 @@ namespace Portfish
         internal static readonly RKISS rk = new RKISS();
 
         internal static readonly char[] _pieces = " PNBRQK".ToCharArray();
-        internal static readonly string[] PieceToChar = { "PNBRQK", "pnbrqk" };
+        internal static readonly string[] PieceToChar = { " PNBRQK", " pnbrqk" };
 
         internal const ulong DeBruijn_64 = 0x3F79D71B4CB0A89UL;
         internal const uint DeBruijn_32 = 0x783A9B23;
