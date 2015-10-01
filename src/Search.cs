@@ -869,8 +869,11 @@ finalize:
             // a fail high/low. Biggest advantage at probing at PV nodes is to have a
             // smooth experience in analysis mode. We don't probe at Root nodes otherwise
             // we should also update RootMoveList to avoid bogus output.
-            if (!RootNode && tteHasValue && tte.depth() >= depth 
-                    && (PvNode ? tte.type() == Bound.BOUND_EXACT 
+            if (!RootNode 
+                && tteHasValue 
+                && tte.depth() >= depth
+                && ttValue != ValueC.VALUE_NONE // Only in case of TT access race
+                && (PvNode ? tte.type() == Bound.BOUND_EXACT 
                             : ttValue >= beta ? ((tte.type() & Bound.BOUND_LOWER) != 0 )
                                               : ((tte.type() & Bound.BOUND_UPPER) != 0)))
             {
@@ -897,17 +900,27 @@ finalize:
             }
             else if (tteHasValue)
             {
-                Debug.Assert(tte.static_value() != ValueC.VALUE_NONE);
-                Debug.Assert(ttValue != ValueC.VALUE_NONE || tte.type() == Bound.BOUND_NONE);
-
+                // Following asserts are valid only in single thread condition because
+                // TT access is always racy and its contents cannot be trusted.
+                Debug.Assert(tte.static_value() != ValueC.VALUE_NONE || Threads.size() > 1);
+                Debug.Assert(ttValue != ValueC.VALUE_NONE || tte.type() == Bound.BOUND_NONE || Threads.size() > 1);
+                
                 ss[ssPos].staticEval = tte.static_value();
                 ss[ssPos].evalMargin = tte.static_value_margin();
-                
-                // Can ttValue be used as a better position evaluation?
-                if ((((tte.type() & Bound.BOUND_LOWER) != 0) && ttValue > eval)
-                    || (((tte.type() & Bound.BOUND_UPPER) != 0) && ttValue < eval))
+
+                if (eval == ValueC.VALUE_NONE || ss[ssPos].evalMargin == ValueC.VALUE_NONE) // Due to a race
                 {
-                    eval = ttValue;
+                    eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
+                }
+
+                // Can ttValue be used as a better position evaluation?
+                if (ttValue != ValueC.VALUE_NONE)
+                {
+                    if ((((tte.type() & Bound.BOUND_LOWER) != 0) && ttValue > eval)
+                        || (((tte.type() & Bound.BOUND_UPPER) != 0) && ttValue < eval))
+                    {
+                        eval = ttValue;
+                    }
                 }
             }
             else
@@ -1577,13 +1590,13 @@ finalize:
             // only two types of depth in TT: DEPTH_QS_CHECKS or DEPTH_QS_NO_CHECKS.
             ttDepth = (inCheck || depth >= DepthC.DEPTH_QS_CHECKS ? DepthC.DEPTH_QS_CHECKS : DepthC.DEPTH_QS_NO_CHECKS);
             
-            if (tteHasValue && tte.depth() >= depth
-                    && (PvNode ? tte.type() == Bound.BOUND_EXACT
+            if (tteHasValue 
+                && tte.depth() >= depth
+                && ttValue != ValueC.VALUE_NONE // Only in case of TT access race
+                && (PvNode ? tte.type() == Bound.BOUND_EXACT
                             : ttValue >= beta ? ((tte.type() & Bound.BOUND_LOWER) != 0)
                                               : ((tte.type() & Bound.BOUND_UPPER) != 0)))
             {
-                Debug.Assert(ttValue != ValueC.VALUE_NONE); // Due to depth > DEPTH_NONE
-
                 ss[ssPos].currentMove = ttMove; // Can be MOVE_NONE
                 return ttValue;
             }
@@ -1599,9 +1612,14 @@ finalize:
             {
                 if (tteHasValue)
                 {
-                    Debug.Assert(tte.static_value() != ValueC.VALUE_NONE);
+                    Debug.Assert(tte.static_value() != ValueC.VALUE_NONE || Threads.size() > 1);
                     ss[ssPos].staticEval = bestValue = tte.static_value();
                     ss[ssPos].evalMargin = tte.static_value_margin();
+
+                    if (ss[ssPos].staticEval == ValueC.VALUE_NONE || ss[ssPos].evalMargin == ValueC.VALUE_NONE) // Due to a race
+                    {
+                        ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
+                    }
                 }
                 else
                 {
