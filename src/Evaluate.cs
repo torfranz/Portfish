@@ -300,9 +300,6 @@ namespace Portfish
 
         internal static int RootColor;
 
-        internal static int ContemptFactor;
-        internal static int[] ValueDraw = new int[2];
-
         internal static void init()
         {
             // Alloc arrays
@@ -349,15 +346,6 @@ namespace Portfish
 
                 KingDangerTable[1][i] = Utils.apply_weight(Utils.make_score(t, 0), Weights[EvalWeightC.KingDangerUs]);
                 KingDangerTable[0][i] = Utils.apply_weight(Utils.make_score(t, 0), Weights[EvalWeightC.KingDangerThem]);
-            }
-
-            if (bool.Parse(OptionMap.Instance["UCI_AnalyseMode"].v))
-            {
-                ContemptFactor = ValueC.VALUE_ZERO;
-            }
-            else
-            {
-                ContemptFactor = int.Parse(OptionMap.Instance["Contempt Factor"].v) * Constants.PawnValueMidgame / 100;
             }
         }
 

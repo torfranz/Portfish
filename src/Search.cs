@@ -265,6 +265,8 @@ namespace Portfish
 
         private static readonly History H = new History();
 
+        private static int[] DrawValue = new int[2];
+
         internal static void init()
         {
             SearchTime.Start();
@@ -393,9 +395,7 @@ namespace Portfish
 
             MaterialEntry e;
             pos.this_thread().materialTable.probe(pos, out e);
-            int scaledCF = Evaluate.ContemptFactor * e.game_phase() / PhaseC.PHASE_MIDGAME;
-            Evaluate.ValueDraw[Evaluate.RootColor] = ValueC.VALUE_DRAW - scaledCF;
-            Evaluate.ValueDraw[1 - Evaluate.RootColor] = ValueC.VALUE_DRAW + scaledCF;
+            
             TimeMgr.init(Limits, pos.startpos_ply_counter(), pos.sideToMove);
             TT.new_search();
             H.clear();
@@ -408,6 +408,18 @@ namespace Portfish
 
                 RootMoves.Add(new RootMove(MoveC.MOVE_NONE));
                 goto finalize;
+            }
+
+            if (bool.Parse(OptionMap.Instance["Contempt Factor"].v) && !bool.Parse(OptionMap.Instance["UCI_AnalyseMode"].v))
+            {
+                int cf = int.Parse(OptionMap.Instance["Contempt Factor"].v) * Constants.PawnValueMidgame / 100; // In centipawns
+                cf = cf * e.game_phase() / PhaseC.PHASE_MIDGAME; // Scale down with phase
+                DrawValue[Evaluate.RootColor] = ValueC.VALUE_DRAW - cf;
+                DrawValue[1 - Evaluate.RootColor] = ValueC.VALUE_DRAW + cf;
+            }
+            else
+            {
+                DrawValue[ColorC.WHITE] = DrawValue[ColorC.BLACK] = ValueC.VALUE_DRAW;
             }
 
             if ((bool.Parse(OptionMap.Instance["OwnBook"].v)) && (Limits.infinite == 0))
@@ -770,7 +782,7 @@ namespace Portfish
                 if ((SignalsStop || pos.is_draw(false) || ss[ssPos].ply > Constants.MAX_PLY))
                 {
                     MovesSearchedBroker.Free();
-                    return Evaluate.ValueDraw[pos.sideToMove];
+                    return DrawValue[pos.sideToMove];
                 }
 
                 // Step 3. Mate distance pruning. Even if we mate at the next move our score
@@ -1464,7 +1476,7 @@ namespace Portfish
             // Check for an instant draw or maximum ply reached
             if (pos.is_draw(true) || ss[ssPos].ply > Constants.MAX_PLY)
             {
-                return Evaluate.ValueDraw[pos.sideToMove];
+                return DrawValue[pos.sideToMove];
             }
 
             // Transposition table lookup. At PV nodes, we don't use the TT for

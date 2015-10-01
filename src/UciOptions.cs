@@ -117,7 +117,7 @@
             var idx = 0;
             this.Add("Book File", new UCIOption(idx++, "book.bin", null));
             this.Add("Best Book Move", new UCIOption(idx++, false, null));
-            this.Add("Contempt Factor", new UCIOption(idx++, 0, -50, 50, UCIOptionChanges.on_eval));
+            this.Add("Contempt Factor", new UCIOption(idx++, 0, -50, 50, null));
             this.Add("Mobility (Middle Game)", new UCIOption(idx++, 100, 0, 200, UCIOptionChanges.on_eval));
             this.Add("Mobility (Endgame)", new UCIOption(idx++, 100, 0, 200, UCIOptionChanges.on_eval));
             this.Add("Passed Pawns (Middle Game)", new UCIOption(idx++, 100, 0, 200, UCIOptionChanges.on_eval));
