@@ -114,30 +114,33 @@ namespace Portfish
 
             var stPos = 0;
             TTEntry tte;
-            var ply = 1;
+            bool tteHasValue;
+            var ply = 0;
             var m = this.pv[0];
 
-            Debug.Assert(m != MoveC.MOVE_NONE && pos.is_pseudo_legal(m));
-
             this.pv.Clear();
-            this.pv.Add(m);
-            pos.do_move(m, sia.state[stPos++]);
-
+            
             uint ttePos = 0;
-
-            while (TT.probe(pos.key(), ref ttePos, out tte) && (m = tte.move()) != MoveC.MOVE_NONE
-                   // Local copy, TT entry could change
-                   && pos.is_pseudo_legal(m) && pos.pl_move_is_legal(m, pos.pinned_pieces()) && ply < Constants.MAX_PLY
-                   && (!pos.is_draw(true, true) || ply < 2))
+            do
             {
                 this.pv.Add(m);
-                pos.do_move(m, sia.state[stPos++]);
-                ply++;
-            }
-            this.pv.Add(MoveC.MOVE_NONE);
 
-            do pos.undo_move(this.pv[--ply]);
-            while (ply != 0);
+                Debug.Assert(pos.move_is_legal(pv[ply]));
+                pos.do_move(pv[ply++], sia.state[stPos++]);
+                tteHasValue = TT.probe(pos.key(), ref ttePos, out tte);
+            } while (tteHasValue
+                    && pos.is_pseudo_legal(m = tte.move()) // Local copy, TT could change
+                    && pos.pl_move_is_legal(m, pos.pinned_pieces())
+                    && ply < Constants.MAX_PLY
+                    && (!pos.is_draw(true, true) || ply < 2));
+            ;
+            
+            this.pv.Add(MoveC.MOVE_NONE); // Must be zero-terminating
+
+            while (ply != 0)
+            {
+                pos.undo_move(this.pv[--ply]);
+            }
 
             StateInfoArrayBroker.Free();
         }
@@ -152,30 +155,38 @@ namespace Portfish
             var stPos = 0;
             TTEntry tte;
             bool tteHasValue;
-            ulong k;
-            int v, m = ValueC.VALUE_NONE;
+            
+            int v, m = 0;
             var ply = 0;
             uint ttePos = 0;
-
-            Debug.Assert(this.pv[ply] != MoveC.MOVE_NONE && pos.is_pseudo_legal(this.pv[ply]));
-
+            
             do
             {
-                k = pos.key();
-                tteHasValue = TT.probe(k, ref ttePos, out tte);
+                tteHasValue = TT.probe(pos.key(), ref ttePos, out tte);
 
-                // Don't overwrite existing correct entries
-                if ((!tteHasValue) || tte.move() != this.pv[ply])
+                if ((!tteHasValue) || tte.move() != this.pv[ply]) // Don't overwrite existing correct entries
                 {
-                    v = (pos.in_check() ? ValueC.VALUE_NONE : Evaluate.do_evaluate(false, pos, ref m));
-                    TT.store(k, ValueC.VALUE_NONE, Bound.BOUND_NONE, DepthC.DEPTH_NONE, this.pv[ply], v, m);
-                }
-                pos.do_move(this.pv[ply], sia.state[stPos++]);
-            }
-            while (this.pv[++ply] != MoveC.MOVE_NONE);
+                    if (pos.in_check())
+                    {
+                        v = m = ValueC.VALUE_NONE;
+                    }
+                    else
+                    {
+                        v = Evaluate.do_evaluate(false, pos, ref m);
+                    }
 
-            do pos.undo_move(this.pv[--ply]);
-            while (ply != 0);
+                    TT.store(pos.key(), ValueC.VALUE_NONE, Bound.BOUND_NONE, DepthC.DEPTH_NONE, this.pv[ply], v, m);
+                }
+
+                Debug.Assert(pos.move_is_legal(pv[ply]));
+                pos.do_move(this.pv[ply++], sia.state[stPos++]);
+            }
+            while (this.pv[ply] != MoveC.MOVE_NONE);
+
+            while (ply != 0)
+            {
+                pos.undo_move(this.pv[--ply]);
+            }
 
             StateInfoArrayBroker.Free();
         }
