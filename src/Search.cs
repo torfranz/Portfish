@@ -272,7 +272,7 @@ namespace Portfish
 
         internal static Stopwatch lastInfoTime = new Stopwatch();
 
-        internal static readonly Position RootPosition = new Position();
+        internal static readonly Position RootPos = new Position();
 
         internal static readonly RKISS rk = new RKISS();
 
@@ -456,29 +456,41 @@ namespace Portfish
 
         /// Search::think() is the external interface to Stockfish's search, and is
         /// called by the main thread when the program receives the UCI 'go' command. It
-        /// searches from RootPosition and at the end prints the "bestmove" to output.
+        /// searches from RootPos and at the end prints the "bestmove" to output.
         internal static void think()
         {
-            var pos = RootPosition;
-            
             //SearchTime.Restart();
-            Search.RootColor = pos.sideToMove;
+            RootColor = RootPos.sideToMove;
+            TimeMgr.init(Limits, RootPos.startpos_ply_counter(), RootColor);
 
             MaterialEntry e;
-            pos.this_thread().materialTable.probe(pos, out e);
+            RootPos.this_thread().materialTable.probe(RootPos, out e);
             
-            TimeMgr.init(Limits, pos.startpos_ply_counter(), pos.sideToMove);
-            TT.new_search();
-            H.clear();
-
             if (RootMoves.Count == 0)
             {
-                Plug.Write("info depth 0 score ");
-                Plug.Write(score_to_uci(pos.in_check() ? -ValueC.VALUE_MATE : ValueC.VALUE_DRAW));
-                Plug.Write(Constants.endl);
-
                 RootMoves.Add(new RootMove(MoveC.MOVE_NONE));
+
+                Plug.Write("info depth 0 score ");
+                Plug.Write(score_to_uci(RootPos.in_check() ? -ValueC.VALUE_MATE : ValueC.VALUE_DRAW));
+                Plug.Write(Constants.endl);
+                
                 goto finalize;
+            }
+
+            if ((bool.Parse(OptionMap.Instance["OwnBook"].v)) && (Limits.infinite == 0))
+            {
+                var bookMove = PolyglotBook.probe(
+                    RootPos,
+                    OptionMap.Instance["Book File"].v,
+                    bool.Parse(OptionMap.Instance["Best Book Move"].v));
+                if ((bookMove != 0) && Utils.existRootMove(RootMoves, bookMove))
+                {
+                    var bestpos = find(RootMoves, 0, RootMoves.Count, bookMove);
+                    var temp = RootMoves[0];
+                    RootMoves[0] = RootMoves[bestpos];
+                    RootMoves[bestpos] = temp;
+                    goto finalize;
+                }
             }
 
             if (int.Parse(OptionMap.Instance["Contempt Factor"].v) != 0 && !bool.Parse(OptionMap.Instance["UCI_AnalyseMode"].v))
@@ -491,22 +503,6 @@ namespace Portfish
             else
             {
                 DrawValue[ColorC.WHITE] = DrawValue[ColorC.BLACK] = ValueC.VALUE_DRAW;
-            }
-
-            if ((bool.Parse(OptionMap.Instance["OwnBook"].v)) && (Limits.infinite == 0))
-            {
-                var bookMove = PolyglotBook.probe(
-                    pos,
-                    OptionMap.Instance["Book File"].v,
-                    bool.Parse(OptionMap.Instance["Best Book Move"].v));
-                if ((bookMove != 0) && Utils.existRootMove(RootMoves, bookMove))
-                {
-                    var bestpos = find(RootMoves, 0, RootMoves.Count, bookMove);
-                    var temp = RootMoves[0];
-                    RootMoves[0] = RootMoves[bestpos];
-                    RootMoves[bestpos] = temp;
-                    goto finalize;
-                }
             }
 
             var ttSize = uint.Parse(OptionMap.Instance["Hash"].v);
@@ -533,7 +529,7 @@ namespace Portfish
             }
 
             // We're ready to start searching. Call the iterative deepening loop function
-            id_loop(pos);
+            id_loop(RootPos);
 
             // Stop timer and send all the slaves to sleep, if not already sleeping
             Threads.set_timer(0); // Stop timer
@@ -546,14 +542,14 @@ finalize:
             // move before we are told to do so.
             if (!SignalsStop && (Limits.ponder || (Limits.infinite != 0)))
             {
-                pos.this_thread().wait_for_stop_or_ponderhit();
+                RootPos.this_thread().wait_for_stop_or_ponderhit();
             }
 
             // Best move could be MOVE_NONE when searching on a stalemate position
             Plug.Write("bestmove ");
-            Plug.Write(Utils.move_to_uci(RootMoves[0].pv[0], pos.chess960));
+            Plug.Write(Utils.move_to_uci(RootMoves[0].pv[0], RootPos.chess960));
             Plug.Write(" ponder ");
-            Plug.Write(Utils.move_to_uci(RootMoves[0].pv[1], pos.chess960));
+            Plug.Write(Utils.move_to_uci(RootMoves[0].pv[1], RootPos.chess960));
             Plug.Write(Constants.endl);
         }
 
@@ -573,6 +569,8 @@ finalize:
             depth = BestMoveChanges = 0;
             bestValue = delta = -ValueC.VALUE_INFINITE;
             ss[ssPos].currentMove = MoveC.MOVE_NULL;
+            TT.new_search();
+            H.clear();
 
             PVSize = int.Parse(OptionMap.Instance["MultiPV"].v);
             using (var skill = new Skill(int.Parse(OptionMap.Instance["Skill Level"].v)))
@@ -2056,7 +2054,7 @@ finalize:
             {
                 ThreadHelper.lock_grab(Threads.splitLock);
 
-                nodes = RootPosition.nodes;
+                nodes = RootPos.nodes;
                 
                 // Loop across all split points and sum accumulated SplitPoint nodes plus
                 // all the currently active slaves positions.

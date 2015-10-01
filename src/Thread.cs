@@ -741,7 +741,7 @@ namespace Portfish
             Search.SignalsStopOnPonderhit = Search.SignalsFirstRootMove = false;
             Search.SignalsStop = Search.SignalsFailedLowAtRoot = false;
 
-            Search.RootPosition.copy(pos);
+            Search.RootPos.copy(pos);
             Search.Limits = limits;
             Search.RootMoves.Clear();
 

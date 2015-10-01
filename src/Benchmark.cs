@@ -174,7 +174,7 @@ namespace Portfish
                 {
                     Threads.start_searching(pos, limits, new List<int>());
                     Threads.wait_for_search_finished();
-                    nodes = Search.RootPosition.nodes;
+                    nodes = Search.RootPos.nodes;
                     res[i] = nodes;
                 }
 
