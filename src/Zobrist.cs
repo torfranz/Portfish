@@ -69,10 +69,10 @@ namespace Portfish
 
             for (var pt = PieceTypeC.PAWN; pt <= PieceTypeC.KING; pt++)
             {
-                Position.PieceValue[Constants.Midgame][Utils.make_piece(ColorC.BLACK, pt)] = Position.PieceValue[Constants.Midgame][pt];
-                Position.PieceValue[Constants.Endgame][Utils.make_piece(ColorC.BLACK, pt)] = Position.PieceValue[Constants.Endgame][pt];
+                Position.PieceValue[PhaseC.MG][Utils.make_piece(ColorC.BLACK, pt)] = Position.PieceValue[PhaseC.MG][pt];
+                Position.PieceValue[PhaseC.EG][Utils.make_piece(ColorC.BLACK, pt)] = Position.PieceValue[PhaseC.EG][pt];
                 
-                var v = Utils.make_score(Position.PieceValue[Constants.Midgame][pt], Position.PieceValue[Constants.Endgame][pt]);
+                var v = Utils.make_score(Position.PieceValue[PhaseC.MG][pt], Position.PieceValue[PhaseC.EG][pt]);
                 
                 for (var s = SquareC.SQ_A1; s <= SquareC.SQ_H8; s++)
                 {

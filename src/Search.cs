@@ -1143,7 +1143,7 @@ namespace Portfish
                                     && Utils.type_of(pos.piece_on(Utils.to_sq(move))) != PieceTypeC.PAWN
                                     && Utils.type_of_move(move) == MoveTypeC.NORMAL
                                     && (pos.non_pawn_material(ColorC.WHITE) + pos.non_pawn_material(ColorC.BLACK) 
-                                        - Position.PieceValue[Constants.Midgame][pos.piece_on(Utils.to_sq(move))] == ValueC.VALUE_ZERO));
+                                        - Position.PieceValue[PhaseC.MG][pos.piece_on(Utils.to_sq(move))] == ValueC.VALUE_ZERO));
 
                 // Step 12. Extend checks and, in PV nodes, also dangerous moves
                 if (PvNode && dangerous)
@@ -1576,7 +1576,7 @@ namespace Portfish
                 if (!PvNode && !inCheck && !givesCheck && move != ttMove && enoughMaterial
                     && Utils.type_of_move(move) != MoveTypeC.PROMOTION && !pos.is_passed_pawn_push(move))
                 {
-                    futilityValue = futilityBase + Position.PieceValue[Constants.Endgame][pos.board[move & 0x3F]]
+                    futilityValue = futilityBase + Position.PieceValue[PhaseC.EG][pos.board[move & 0x3F]]
                                     + (Utils.type_of_move(move) == MoveTypeC.ENPASSANT
                                            ? Constants.PawnValueEndgame
                                            : ValueC.VALUE_ZERO);
@@ -1748,7 +1748,7 @@ namespace Portfish
             while (b != 0)
             {
                 // Note that here we generate illegal "double move"!
-                if (futilityBase + Position.PieceValue[Constants.Endgame][pos.piece_on(Utils.pop_lsb(ref b))] >= beta)
+                if (futilityBase + Position.PieceValue[PhaseC.EG][pos.piece_on(Utils.pop_lsb(ref b))] >= beta)
                 {
                     return true;
                 }
@@ -1865,7 +1865,7 @@ namespace Portfish
             // Case 2: If the threatened piece has value less than or equal to the
             // value of the threatening piece, don't prune moves which defend it.
             if (pos.is_capture(threat)
-                && (Position.PieceValue[Constants.Midgame][pos.piece_on(tfrom)] >= Position.PieceValue[Constants.Midgame][pos.piece_on(tto)]
+                && (Position.PieceValue[PhaseC.MG][pos.piece_on(tfrom)] >= Position.PieceValue[PhaseC.MG][pos.piece_on(tto)]
                     || Utils.type_of(pos.piece_on(tfrom)) == PieceTypeC.KING) && pos.move_attacks_square(m, tto))
             {
                 return true;

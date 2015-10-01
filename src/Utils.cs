@@ -861,7 +861,7 @@ namespace Portfish
 
         internal static int color_of(int p)
         {
-            return (p >> 3);
+            return p == PieceC.NO_PIECE ? ColorC.NO_COLOR : p >> 3;
         }
 
 #if AGGR_INLINE

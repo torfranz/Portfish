@@ -93,10 +93,6 @@ namespace Portfish
 
         internal const ulong Rank8BB = Rank1BB << (8 * 7);
 
-        internal const int Midgame = 0;
-
-        internal const int Endgame = 1;
-
         internal const int PawnValueMidgame = 198;
 
         internal const int PawnValueEndgame = 258;

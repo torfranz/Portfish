@@ -119,7 +119,7 @@ namespace Portfish
     /// Game phase
     internal static class PhaseC
     {
-        internal const int PHASE_ENDGAME = 0, PHASE_MIDGAME = 128;
+        internal const int PHASE_ENDGAME = 0, PHASE_MIDGAME = 128, MG = 0, EG = 1, PHASE_NB = 2;
     };
 
     internal static class CastleRightC

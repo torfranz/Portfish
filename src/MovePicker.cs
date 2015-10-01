@@ -267,7 +267,7 @@ namespace Portfish
             this.phase = SequencerC.PROBCUT;
 
             // In ProbCut we generate only captures better than parent's captured piece
-            this.captureThreshold = Position.PieceValue[Constants.Midgame][pt];
+            this.captureThreshold = Position.PieceValue[PhaseC.MG][pt];
             this.ttMove = ((ttm != 0) && this.pos.is_pseudo_legal(ttm) ? ttm : MoveC.MOVE_NONE);
 
             if ((this.ttMove != 0)
@@ -304,12 +304,12 @@ namespace Portfish
             for (var idx = 0; idx < this.lastMovePos; idx++)
             {
                 var m = this.ms[idx].move;
-                this.ms[idx].score = Position.PieceValue[Constants.Midgame][this.pos.board[m & 0x3F]]
+                this.ms[idx].score = Position.PieceValue[PhaseC.MG][this.pos.board[m & 0x3F]]
                                      - (this.pos.board[((m >> 6) & 0x3F)] & 7);
                 //if ((m & (3 << 14)) == (1 << 14))
                 if (Utils.type_of_move(m) == MoveTypeC.PROMOTION)
                 {
-                    this.ms[idx].score += Position.PieceValue[Constants.Midgame][(((m >> 12) & 3) + 2)];
+                    this.ms[idx].score += Position.PieceValue[PhaseC.MG][(((m >> 12) & 3) + 2)];
                 }
             }
         }
@@ -349,8 +349,8 @@ namespace Portfish
                 var m = this.ms[idx].move;
                 if (
                     (seeScore =
-                     ((Position.PieceValue[Constants.Midgame][this.pos.board[m & 0x3F]]
-                       >= Position.PieceValue[Constants.Midgame][this.pos.board[((m >> 6) & 0x3F)]])
+                     ((Position.PieceValue[PhaseC.MG][this.pos.board[m & 0x3F]]
+                       >= Position.PieceValue[PhaseC.MG][this.pos.board[((m >> 6) & 0x3F)]])
                           ? 1
                           : this.pos.see(m, false))) < 0)
                 {
@@ -359,7 +359,7 @@ namespace Portfish
                 else if (((this.pos.board[m & 0x3F] != PieceC.NO_PIECE) && !((m & (3 << 14)) == (3 << 14)))
                          || ((m & (3 << 14)) == (2 << 14)))
                 {
-                    this.ms[idx].score = Position.PieceValue[Constants.Midgame][this.pos.board[(m & 0x3F)]]
+                    this.ms[idx].score = Position.PieceValue[PhaseC.MG][this.pos.board[(m & 0x3F)]]
                                          - (this.pos.board[((m >> 6) & 0x3F)] & 7) + History.MaxValue;
                 }
                 else

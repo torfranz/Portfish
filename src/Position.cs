@@ -1618,11 +1618,11 @@ namespace Portfish
                 {
                     if (them == 0)
                     {
-                        this.st.npMaterialWHITE -= PieceValue[Constants.Midgame][capture];
+                        this.st.npMaterialWHITE -= PieceValue[PhaseC.MG][capture];
                     }
                     else
                     {
-                        this.st.npMaterialBLACK -= PieceValue[Constants.Midgame][capture];
+                        this.st.npMaterialBLACK -= PieceValue[PhaseC.MG][capture];
                     }
                 }
 
@@ -1737,11 +1737,11 @@ namespace Portfish
                     // Update material
                     if (us == 0)
                     {
-                        this.st.npMaterialWHITE += PieceValue[Constants.Midgame][promotion];
+                        this.st.npMaterialWHITE += PieceValue[PhaseC.MG][promotion];
                     }
                     else
                     {
-                        this.st.npMaterialBLACK += PieceValue[Constants.Midgame][promotion];
+                        this.st.npMaterialBLACK += PieceValue[PhaseC.MG][promotion];
                     }
                 }
 
@@ -2044,7 +2044,7 @@ namespace Portfish
         internal int see(int m, bool with_sign)
         {
             if ((with_sign)
-                && (PieceValue[Constants.Midgame][this.board[m & 0x3F]] >= PieceValue[Constants.Midgame][this.board[((m >> 6) & 0x3F)]]))
+                && (PieceValue[PhaseC.MG][this.board[m & 0x3F]] >= PieceValue[PhaseC.MG][this.board[((m >> 6) & 0x3F)]]))
             {
                 return 1;
             }
@@ -2092,7 +2092,7 @@ namespace Portfish
             stmAttackers = attackers & this.byColorBB[stm];
             if (stmAttackers == 0)
             {
-                return PieceValue[Constants.Midgame][captured];
+                return PieceValue[PhaseC.MG][captured];
             }
 
             // The destination square is defended, which makes things rather more
@@ -2104,7 +2104,7 @@ namespace Portfish
             var swap = SwapListBroker.GetObject();
             var swapList = swap.list;
 
-            swapList[0] = PieceValue[Constants.Midgame][captured];
+            swapList[0] = PieceValue[PhaseC.MG][captured];
             captured = this.board[from] & 7;
 
             do
@@ -2112,7 +2112,7 @@ namespace Portfish
                 Debug.Assert(slIndex < 32);
                 
                 // Add the new entry to the swap list
-                swapList[slIndex] = -swapList[slIndex - 1] + PieceValue[Constants.Midgame][captured];
+                swapList[slIndex] = -swapList[slIndex - 1] + PieceValue[PhaseC.MG][captured];
                 slIndex++;
 
                 // Locate and remove from 'occupied' the next least valuable attacker
@@ -2321,7 +2321,7 @@ namespace Portfish
 
             for (var pt = PieceTypeC.KNIGHT; pt <= PieceTypeC.QUEEN; pt++)
             {
-                value += this.piece_count(c, pt) * PieceValue[Constants.Midgame][pt];
+                value += this.piece_count(c, pt) * PieceValue[PhaseC.MG][pt];
             }
 
             return value;
