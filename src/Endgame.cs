@@ -175,7 +175,7 @@ namespace Portfish
             AddValue("KRKP", Endgame_KRKP);
             AddValue("KRKB", Endgame_KRKB);
             AddValue("KRKN", Endgame_KRKN);
-            AddValue("KQKP", Endgame_KQKP);
+            //AddValue("KQKP", Endgame_KQKP); // TODO: Gives Assert in bench 3, don't use for now
             AddValue("KQKR", Endgame_KQKR);
             AddValue("KBBKN", Endgame_KBBKN);
 
@@ -418,16 +418,19 @@ namespace Portfish
             Square loserKSq = pos.king_square(weakerSide);
             Square pawnSq = pos.pieceList[weakerSide][PieceTypeC.PAWN][0];
         
-            Value result = Constants.QueenValueEndgame - Constants.PawnValueEndgame +DistanceBonus[Utils.square_distance(winnerKSq, loserKSq)];
+            var result = Constants.QueenValueEndgame - Constants.PawnValueEndgame + DistanceBonus[Utils.square_distance(winnerKSq, loserKSq)];
         
-            if (Utils.square_distance(loserKSq, pawnSq) == 1
-                && Utils.relative_rank_CS(weakerSide, pawnSq) == RankC.RANK_7)
+            if (    Utils.square_distance(loserKSq, pawnSq) == 1
+                 && Utils.relative_rank_CS(weakerSide, pawnSq) == RankC.RANK_7)
             {
                 File f = Utils.file_of(pawnSq);
-        
+
                 if (f == FileC.FILE_A || f == FileC.FILE_C || f == FileC.FILE_F || f == FileC.FILE_H)
+                {
                     result = DistanceBonus[Utils.square_distance(winnerKSq, loserKSq)];
+                }
             }
+
             return strongerSide == pos.sideToMove ? result : -result;
         }
         
