@@ -681,7 +681,11 @@ finalize:
 
                         // Sort the PV lines searched so far and update the GUI
                         Utils.sort(RootMoves, 0, PVIdx + 1);
-                        pv_info_to_uci(pos, depth, alpha, beta);
+
+                        if (PVIdx + 1 == PVSize || SearchTime.ElapsedMilliseconds > 3000)
+                        {
+                            pv_info_to_uci(pos, depth, alpha, beta);
+                        }
                     }
 
                     // Do we need to pick now the sub-optimal best move ?
@@ -1191,7 +1195,7 @@ finalize:
                 {
                     SignalsFirstRootMove = (moveCount == 1);
 
-                    if (thisThread == Threads.main_thread() && SearchTime.ElapsedMilliseconds > 2000)
+                    if (thisThread == Threads.main_thread() && SearchTime.ElapsedMilliseconds > 3000)
                     {
                         Plug.Write("info depth ");
                         Plug.Write((depth / DepthC.ONE_PLY).ToString());
@@ -1809,8 +1813,9 @@ finalize:
                 return Utils.mated_in(ss[ssPos].ply); // Plies to mate from the root
             }
 
-            TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), 
-                    PvNode && bestMove > oldAlpha ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
+            TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply),
+                    PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
+                    //PvNode && bestMove > oldAlpha ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, // TODO: this line asserts in bench
                     ttDepth, bestMove, ss[ssPos].staticEval, ss[ssPos].evalMargin);
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
