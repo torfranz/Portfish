@@ -1706,17 +1706,16 @@ finalize:
 
                     if (futilityValue < beta)
                     {
-                        if (futilityValue > bestValue)
-                        {
-                            bestValue = futilityValue;
-                        }
-
+                        bestValue = Math.Max(bestValue, futilityValue);
                         continue;
                     }
 
                     // Prune moves with negative or equal SEE
-                    if (futilityBase < beta && depth < DepthC.DEPTH_ZERO && pos.see(move, false) <= 0)
+                    if (futilityBase < beta 
+                        && depth < DepthC.DEPTH_ZERO 
+                        && pos.see(move, false) <= 0)
                     {
+                        bestValue = Math.Max(bestValue, futilityBase);
                         continue;
                     }
                 }
