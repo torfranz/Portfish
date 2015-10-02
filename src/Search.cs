@@ -1821,39 +1821,51 @@ finalize:
         // will be pruned.
         private static bool check_is_dangerous(Position pos, int move, int futilityBase, int beta)
         {
-            ulong b, occ, oldAtt, newAtt, kingAtt;
-            int from, to, ksq;
-            int pc;
-            int them;
+            //ulong b, occ, oldAtt, newAtt, kingAtt;
+            //int from, to, ksq;
+            //int pc;
+            //int them;
 
-            from = Utils.from_sq(move);
-            to = Utils.to_sq(move);
-            them = Utils.flip_C(pos.sideToMove);
-            ksq = pos.king_square(them);
-            kingAtt = Position.attacks_from_KING(ksq);
-            pc = pos.piece_moved(move);
+            //from = Utils.from_sq(move);
+            //to = Utils.to_sq(move);
+            //them = Utils.flip_C(pos.sideToMove);
+            //ksq = pos.king_square(them);
+            //kingAtt = Position.attacks_from_KING(ksq);
+            //pc = pos.piece_moved(move);
 
-            occ = pos.occupied_squares ^ Utils.SquareBB[from] ^ Utils.SquareBB[ksq];
-            oldAtt = Position.attacks_from(pc, from, occ);
-            newAtt = Position.attacks_from(pc, to, occ);
+            //occ = pos.occupied_squares ^ Utils.SquareBB[from] ^ Utils.SquareBB[ksq];
+            //oldAtt = Position.attacks_from(pc, from, occ);
+            //newAtt = Position.attacks_from(pc, to, occ);
 
-            // Rule 1. Checks which give opponent's king at most one escape square are dangerous
-            b = kingAtt & ~pos.pieces_C(them) & ~newAtt & ~(1UL << to);
+            //// Rule 1. Checks which give opponent's king at most one escape square are dangerous
+            //b = kingAtt & ~pos.pieces_C(them) & ~newAtt & ~(1UL << to);
 
-            if ((b & (b - 1)) == 0) // Catches also !b
+            //if ((b & (b - 1)) == 0) // Catches also !b
+            Piece pc = pos.piece_moved(move);
+            Square from = Utils.from_sq(move);
+            Square to = Utils.to_sq(move);
+            Color them = pos.sideToMove ^ 1;
+            Square ksq = pos.king_square(them);
+            Bitboard enemies = pos.pieces_C(them);
+            Bitboard kingAtt = Position.attacks_from_KING(ksq);
+            Bitboard occ = pos.occupied_squares ^ Utils.SquareBB[from] ^ Utils.SquareBB[ksq];
+            Bitboard oldAtt = Position.attacks_from(pc, from, occ);
+            Bitboard newAtt = Position.attacks_from(pc, to, occ);
+
+            // Checks which give opponent's king at most one escape square are dangerous
+            if (!Utils.more_than_one(kingAtt & ~(enemies | newAtt | (ulong)to)))
             {
                 return true;
             }
 
-            // Rule 2. Queen contact check is very dangerous
+            // Queen contact check is very dangerous
             if (Utils.type_of(pc) == PieceTypeC.QUEEN && (Utils.bit_is_set(kingAtt, to) != 0))
             {
                 return true;
             }
 
-            // Rule 3. Creating new double threats with checks
-            b = pos.pieces_C(them) & newAtt & ~oldAtt & ~(1UL << ksq);
-
+            // Creating new double threats with checks is dangerous
+            Bitboard b = (enemies ^ (ulong)ksq) & newAtt & ~oldAtt;
             while (b != 0)
             {
                 // Note that here we generate illegal "double move"!
@@ -1997,7 +2009,8 @@ finalize:
         private static void pv_info_to_uci(Position pos, int depth, int alpha, int beta)
         {
             var t = SearchTime.ElapsedMilliseconds;
-            var selDepth = 0;
+            var uciPVSize = Math.Min(int.Parse(OptionMap.Instance["MultiPV"].v), RootMoves.Count);
+             var selDepth = 0;
 
             for (var i = 0; i < Threads.size(); i++)
             {
@@ -2007,7 +2020,7 @@ finalize:
                 }
             }
 
-            for (var i = 0; i < Math.Min(int.Parse(OptionMap.Instance["MultiPV"].v), RootMoves.Count); i++)
+            for (var i = 0; i < uciPVSize; i++)
             {
                 var updated = (i <= PVIdx);
 
