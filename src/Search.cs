@@ -1915,7 +1915,7 @@ finalize:
 
             // Case 4: The destination square for m2 is defended by the moving piece in m1
             p1 = pos.piece_on(t1);
-            if ((Utils.bit_is_set(pos.attacks_from_PS(p1, t1), t2)) != 0)
+            if ((Utils.bit_is_set(Position.attacks_from(p1, t1, Utils.xor_bit(pos.occupied_squares, f2)), t2)) != 0)
             {
                 return true;
             }
