@@ -1562,7 +1562,7 @@ finalize:
 
             StateInfo st = null;
             int ttMove, move, bestMove;
-            int ttValue, bestValue, value, futilityValue, futilityBase;
+            int ttValue, bestValue, value, futilityValue, futilityBase, oldAlpha = 0;
 
             bool givesCheck, enoughMaterial, evasionPrunable, fromNull;
             var tteHasValue = false;
@@ -1570,6 +1570,12 @@ finalize:
             uint ttePos = 0;
             int ttDepth;
             Key posKey;
+
+            // To flag BOUND_EXACT a node with eval above alpha and no available moves
+            if (PvNode)
+            {
+                oldAlpha = alpha;
+            }
 
             ss[ssPos].currentMove = bestMove = MoveC.MOVE_NONE;
             ss[ssPos].ply = ss[ssPos - 1].ply + 1;
@@ -1802,7 +1808,7 @@ finalize:
             }
 
             TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), 
-                    PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
+                    PvNode && bestMove > oldAlpha ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
                     ttDepth, bestMove, ss[ssPos].staticEval, ss[ssPos].evalMargin);
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
