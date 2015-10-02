@@ -694,7 +694,7 @@ finalize:
                         }
 
                         // Sort the PV lines searched so far and update the GUI
-                        Utils.sort(RootMoves, 0, PVIdx);
+                        Utils.sort(RootMoves, 0, PVIdx + 1);
                         pv_info_to_uci(pos, depth, alpha, beta);
                     }
 
