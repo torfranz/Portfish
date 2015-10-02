@@ -1570,7 +1570,7 @@ finalize:
             int ttMove, move, bestMove;
             int ttValue, bestValue, value, futilityValue, futilityBase, oldAlpha = 0;
 
-            bool givesCheck, enoughMaterial, evasionPrunable, fromNull;
+            bool givesCheck, enoughMaterial, evasionPrunable;
             var tteHasValue = false;
             TTEntry tte;
             uint ttePos = 0;
@@ -1585,8 +1585,7 @@ finalize:
 
             ss[ssPos].currentMove = bestMove = MoveC.MOVE_NONE;
             ss[ssPos].ply = ss[ssPos - 1].ply + 1;
-            fromNull = ss[ssPos - 1].currentMove == MoveC.MOVE_NULL;
-
+            
             // Check for an instant draw or maximum ply reached
             if (pos.is_draw(false, false) || ss[ssPos].ply > Constants.MAX_PLY)
             {
@@ -1625,12 +1624,7 @@ finalize:
             }
             else
             {
-                if (fromNull)
-                {
-                    ss[ssPos].staticEval = bestValue = -ss[ssPos - 1].staticEval;
-                    ss[ssPos].evalMargin = ValueC.VALUE_ZERO;
-                }
-                else if (tteHasValue)
+                if (tteHasValue)
                 {
                     Debug.Assert(tte.static_value() != ValueC.VALUE_NONE || Threads.size() > 1);
                     ss[ssPos].staticEval = bestValue = tte.static_value();
@@ -1694,7 +1688,6 @@ finalize:
                 if (!PvNode 
                     && !InCheck 
                     && !givesCheck
-                    && !fromNull
                     && move != ttMove 
                     && enoughMaterial
                     && Utils.type_of_move(move) != MoveTypeC.PROMOTION && !pos.is_passed_pawn_push(move))
