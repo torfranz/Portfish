@@ -1198,39 +1198,6 @@ namespace Portfish
             }
         }
 
-        /// move_attacks_square() tests whether a move from the current
-        /// position attacks a given square.
-        internal bool move_attacks_square(int m, int s)
-        {
-            Debug.Assert(Utils.is_ok_M(m));
-            Debug.Assert(Utils.is_ok_S(s));
-
-            ulong occ, xray;
-            var from = Utils.from_sq(m);
-            var to = Utils.to_sq(m);
-            var piece = this.piece_moved(m);
-
-            Debug.Assert(!this.is_empty(from));
-
-            // Update occupancy as if the piece is moving
-            occ = Utils.xor_bit(Utils.xor_bit(this.occupied_squares, from), to);
-
-            // The piece moved in 'to' attacks the square 's' ?
-            if (Utils.bit_is_set(attacks_from(piece, to, occ), s) != 0)
-            {
-                return true;
-            }
-
-            // Scan for possible X-ray attackers behind the moved piece
-            xray = (Utils.rook_attacks_bb(s, occ)
-                    & this.pieces(PieceTypeC.ROOK, PieceTypeC.QUEEN, Utils.color_of(piece)))
-                   | (Utils.bishop_attacks_bb(s, occ)
-                      & this.pieces(PieceTypeC.BISHOP, PieceTypeC.QUEEN, Utils.color_of(piece)));
-
-            // Verify attackers are triggered by our move and not already existing
-            return (xray != 0) && ((xray ^ (xray & this.attacks_from_QUEEN(s))) != 0);
-        }
-
         /// pl_move_is_legal() tests whether a pseudo-legal move is legal
         internal bool pl_move_is_legal(int m, ulong pinned)
         {

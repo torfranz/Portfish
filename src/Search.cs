@@ -1970,12 +1970,10 @@ finalize:
             Debug.Assert(!pos.is_capture_or_promotion(m));
             Debug.Assert(!pos.is_passed_pawn_push(m));
 
-            int mfrom, mto, tfrom, tto;
-
-            mfrom = Utils.from_sq(m);
-            mto = Utils.to_sq(m);
-            tfrom = Utils.from_sq(threat);
-            tto = Utils.to_sq(threat);
+            Square mfrom = Utils.from_sq(m);
+            Square mto = Utils.to_sq(m);
+            Square tfrom = Utils.from_sq(threat);
+            Square tto = Utils.to_sq(threat);
 
             // Case 1: Don't prune moves which move the threatened piece
             if (mfrom == tto)
@@ -1987,9 +1985,29 @@ finalize:
             // value of the threatening piece, don't prune moves which defend it.
             if (pos.is_capture(threat)
                 && (Position.PieceValue[PhaseC.MG][pos.piece_on(tfrom)] >= Position.PieceValue[PhaseC.MG][pos.piece_on(tto)]
-                    || Utils.type_of(pos.piece_on(tfrom)) == PieceTypeC.KING) && pos.move_attacks_square(m, tto))
+                    || Utils.type_of(pos.piece_on(tfrom)) == PieceTypeC.KING))
             {
-                return true;
+                // Update occupancy as if the piece is moving
+                var occ = Utils.xor_bit(Utils.xor_bit(pos.occupied_squares, mfrom), mto);
+                Piece piece = pos.piece_on(mfrom);
+
+                // The piece moved in 'to' attacks the square 's' ?
+                if (Utils.bit_is_set(Position.attacks_from(piece, mto, occ), tto) != 0)
+                {
+                    return true;
+                }
+
+                // Scan for possible X-ray attackers behind the moved piece
+                var xray = (Utils.rook_attacks_bb(tto, occ)
+                        & pos.pieces(PieceTypeC.ROOK, PieceTypeC.QUEEN, Utils.color_of(piece)))
+                        | (Utils.bishop_attacks_bb(tto, occ)
+                            & pos.pieces(PieceTypeC.BISHOP, PieceTypeC.QUEEN, Utils.color_of(piece)));
+
+                // Verify attackers are triggered by our move and not already existing
+                if ((xray != 0) && ((xray ^ (xray & pos.attacks_from_QUEEN(tto))) != 0))
+                {
+                    return true;
+                }
             }
 
             // Case 3: If the moving piece in the threatened move is a slider, don't
