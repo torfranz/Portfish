@@ -899,23 +899,12 @@ finalize:
             {
                 ss[ssPos].staticEval = ss[ssPos].evalMargin = eval = ValueC.VALUE_NONE;
             }
-            else if (tteHasValue)
+            else
             {
-                // Following asserts are valid only in single thread condition because
-                // TT access is always racy and its contents cannot be trusted.
-                Debug.Assert(tte.static_value() != ValueC.VALUE_NONE || Threads.size() > 1);
-                Debug.Assert(ttValue != ValueC.VALUE_NONE || tte.type() == Bound.BOUND_NONE || Threads.size() > 1);
+                eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                 
-                ss[ssPos].staticEval = tte.static_value();
-                ss[ssPos].evalMargin = tte.static_value_margin();
-
-                if (eval == ValueC.VALUE_NONE || ss[ssPos].evalMargin == ValueC.VALUE_NONE) // Due to a race
-                {
-                    eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
-                }
-
                 // Can ttValue be used as a better position evaluation?
-                if (ttValue != ValueC.VALUE_NONE)
+                if (tteHasValue && ttValue != ValueC.VALUE_NONE)
                 {
                     if ((((tte.type() & Bound.BOUND_LOWER) != 0) && ttValue > eval)
                         || (((tte.type() & Bound.BOUND_UPPER) != 0) && ttValue < eval))
@@ -923,18 +912,18 @@ finalize:
                         eval = ttValue;
                     }
                 }
-            }
-            else
-            {
-                eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
-                TT.store(
-                    posKey,
-                    ValueC.VALUE_NONE,
-                    Bound.BOUND_NONE,
-                    DepthC.DEPTH_NONE,
-                    MoveC.MOVE_NONE,
-                    ss[ssPos].staticEval,
-                    ss[ssPos].evalMargin);
+
+                if (!tteHasValue)
+                {
+                    TT.store(
+                        posKey,
+                        ValueC.VALUE_NONE,
+                        Bound.BOUND_NONE,
+                        DepthC.DEPTH_NONE,
+                        MoveC.MOVE_NONE,
+                        ss[ssPos].staticEval,
+                        ss[ssPos].evalMargin);
+                }
             }
 
             // Update gain for the parent non-capture move given the static position
@@ -1624,22 +1613,8 @@ finalize:
             }
             else
             {
-                if (tteHasValue)
-                {
-                    Debug.Assert(tte.static_value() != ValueC.VALUE_NONE || Threads.size() > 1);
-                    ss[ssPos].staticEval = bestValue = tte.static_value();
-                    ss[ssPos].evalMargin = tte.static_value_margin();
-
-                    if (ss[ssPos].staticEval == ValueC.VALUE_NONE || ss[ssPos].evalMargin == ValueC.VALUE_NONE) // Due to a race
-                    {
-                        ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
-                    }
-                }
-                else
-                {
-                    ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
-                }
-
+                ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
+                
                 // Stand pat. Return immediately if static value is at least beta
                 if (bestValue >= beta)
                 {
