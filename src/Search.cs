@@ -1847,7 +1847,7 @@ finalize:
             Square ksq = pos.king_square(them);
             Bitboard enemies = pos.pieces_C(them);
             Bitboard kingAtt = Position.attacks_from_KING(ksq);
-            Bitboard occ = pos.occupied_squares ^ Utils.SquareBB[from] ^ Utils.SquareBB[ksq];
+            Bitboard occ = pos.pieces() ^ Utils.SquareBB[from] ^ Utils.SquareBB[ksq];
             Bitboard oldAtt = Position.attacks_from(pc, from, occ);
             Bitboard newAtt = Position.attacks_from(pc, to, occ);
 
@@ -1923,7 +1923,7 @@ finalize:
             // Case 5: Discovered check, checking piece is the piece moved in m1
             ksq = pos.king_square(pos.sideToMove);
             if (piece_is_slider(p1) && (Utils.bit_is_set(Utils.between_bb(t1, ksq), f2) != 0)
-                && (Utils.bit_is_set(Position.attacks_from(p1, t1, Utils.xor_bit(pos.occupied_squares, f2)), ksq) != 0))
+                && (Utils.bit_is_set(Position.attacks_from(p1, t1, Utils.xor_bit(pos.pieces(), f2)), ksq) != 0))
             {
                 return true;
             }
@@ -1987,7 +1987,7 @@ finalize:
                     || Utils.type_of(pos.piece_on(tfrom)) == PieceTypeC.KING))
             {
                 // Update occupancy as if the piece and the threat are moving
-                var occ = Utils.xor_bit(Utils.xor_bit(Utils.xor_bit(pos.occupied_squares, mfrom), mto), tfrom);
+                var occ = Utils.xor_bit(Utils.xor_bit(Utils.xor_bit(pos.pieces(), mfrom), mto), tfrom);
                 Piece piece = pos.piece_on(mfrom);
 
                 // The piece moved in 'to' attacks the square 's' ?
