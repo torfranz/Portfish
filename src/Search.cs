@@ -1462,6 +1462,11 @@ finalize:
                         moveCount,
                         mp,
                         NT);
+
+                    if (bestValue >= beta)
+                    {
+                        break;
+                    }
                 }
             }
 
