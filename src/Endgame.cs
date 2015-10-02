@@ -175,6 +175,7 @@ namespace Portfish
             AddValue("KRKP", Endgame_KRKP);
             AddValue("KRKB", Endgame_KRKB);
             AddValue("KRKN", Endgame_KRKN);
+            AddValue("KQKP", Endgame_KQKP);
             AddValue("KQKR", Endgame_KQKR);
             AddValue("KBBKN", Endgame_KBBKN);
 
@@ -242,12 +243,12 @@ namespace Portfish
 
             var winnerKSq = pos.king_square(strongerSide);
             var loserKSq = pos.king_square(weakerSide);
-            var bishopSquare = pos.pieceList[strongerSide][PieceTypeC.BISHOP][0];
+            var bishopSq = pos.pieceList[strongerSide][PieceTypeC.BISHOP][0];
 
             // kbnk_mate_table() tries to drive toward corners A1 or H8,
             // if we have a bishop that cannot reach the above squares we
             // mirror the kings so to drive enemy toward corners A8 or H1.
-            if (Utils.opposite_colors(bishopSquare, SquareC.SQ_A1))
+            if (Utils.opposite_colors(bishopSq, SquareC.SQ_A1))
             {
                 winnerKSq = Utils.mirror(winnerKSq);
                 loserKSq = Utils.mirror(loserKSq);
@@ -401,6 +402,35 @@ namespace Portfish
             return strongerSide == pos.sideToMove ? result : -result;
         }
 
+        /// KQ vs KP.  In general, a win for the stronger side, however, there are a few
+        /// important exceptions.  Pawn on 7th rank, A,C,F or H file, with king next can
+        /// be a draw, so we scale down to distance between kings only.
+        internal static int Endgame_KQKP(int strongerSide, Position pos)
+        {
+            var weakerSide = strongerSide ^ 1;
+
+            Debug.Assert(pos.non_pawn_material(strongerSide) == Constants.QueenValueMidgame);
+            Debug.Assert(pos.piece_count(strongerSide, PieceTypeC.PAWN) == 0);
+            Debug.Assert(pos.non_pawn_material(weakerSide) == 0);
+            Debug.Assert(pos.piece_count(weakerSide, PieceTypeC.PAWN) == 1);
+
+            Square winnerKSq = pos.king_square(strongerSide);
+            Square loserKSq = pos.king_square(weakerSide);
+            Square pawnSq = pos.pieceList[weakerSide][PieceTypeC.PAWN][0];
+        
+            Value result = Constants.QueenValueEndgame - Constants.PawnValueEndgame +DistanceBonus[Utils.square_distance(winnerKSq, loserKSq)];
+        
+            if (Utils.square_distance(loserKSq, pawnSq) == 1
+                && Utils.relative_rank_CS(weakerSide, pawnSq) == RankC.RANK_7)
+            {
+                File f = Utils.file_of(pawnSq);
+        
+                if (f == FileC.FILE_A || f == FileC.FILE_C || f == FileC.FILE_F || f == FileC.FILE_H)
+                    result = DistanceBonus[Utils.square_distance(winnerKSq, loserKSq)];
+            }
+            return strongerSide == pos.sideToMove ? result : -result;
+        }
+        
         /// KQ vs KR.  This is almost identical to KX vs K:  We give the attacking
         /// king a bonus for having the kings close together, and for forcing the
         /// defending king towards the edge.  If we also take care to avoid null move
