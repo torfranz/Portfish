@@ -1457,7 +1457,9 @@ finalize:
                 }
 
                 // Step 19. Check for split
-                if (!SpNode && depth >= Threads.min_split_depth() && bestValue < beta
+                if (!SpNode 
+                    && depth >= Threads.min_split_depth() 
+                    && bestValue < beta
                     && Threads.available_slave_exists(thisThread))
                 {
                     bestValue = Threads.split(
@@ -1474,7 +1476,6 @@ finalize:
                         moveCount,
                         mp,
                         NT);
-                    break;
                 }
             }
 
