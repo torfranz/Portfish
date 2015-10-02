@@ -1434,8 +1434,10 @@ finalize:
                             alpha = value; // Update alpha here! Always alpha < beta
                             if (SpNode) sp.alpha = value;
                         }
-                        else // Fail high
+                        else 
                         {
+                            Debug.Assert(value >= beta); // Fail high
+
                             if (SpNode) sp.cutoff = true;
                             break;
                         }
