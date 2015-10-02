@@ -1564,7 +1564,7 @@ finalize:
             int ttMove, move, bestMove;
             int ttValue, bestValue, value, futilityValue, futilityBase;
 
-            bool enoughMaterial, givesCheck, evasionPrunable;
+            bool givesCheck, enoughMaterial, evasionPrunable, fromNull;
             var tteHasValue = false;
             TTEntry tte;
             uint ttePos = 0;
@@ -1573,6 +1573,7 @@ finalize:
 
             ss[ssPos].currentMove = bestMove = MoveC.MOVE_NONE;
             ss[ssPos].ply = ss[ssPos - 1].ply + 1;
+            fromNull = ss[ssPos - 1].currentMove == MoveC.MOVE_NULL;
 
             // Check for an instant draw or maximum ply reached
             if (pos.is_draw(false, false) || ss[ssPos].ply > Constants.MAX_PLY)
@@ -1612,7 +1613,12 @@ finalize:
             }
             else
             {
-                if (tteHasValue)
+                if (fromNull)
+                {
+                    ss[ssPos].staticEval = bestValue = -ss[ssPos - 1].staticEval;
+                    ss[ssPos].evalMargin = ValueC.VALUE_ZERO;
+                }
+                else if (tteHasValue)
                 {
                     Debug.Assert(tte.static_value() != ValueC.VALUE_NONE || Threads.size() > 1);
                     ss[ssPos].staticEval = bestValue = tte.static_value();
@@ -1623,11 +1629,6 @@ finalize:
                         ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                     }
                 }
-                //else if (ss[ssPos - 1].currentMove == MoveC.MOVE_NULL)
-                //{
-                //    ss[ssPos].staticEval = bestValue = -ss[ssPos - 1].staticEval;
-                //    ss[ssPos].evalMargin = ValueC.VALUE_ZERO; // Hack, we really don't know the value
-                //}
                 else
                 {
                     ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
@@ -1678,7 +1679,12 @@ finalize:
                 givesCheck = pos.move_gives_check(move, ci);
 
                 // Futility pruning
-                if (!PvNode && !InCheck && !givesCheck && move != ttMove && enoughMaterial
+                if (!PvNode 
+                    && !InCheck 
+                    && !givesCheck
+                    && !fromNull
+                    && move != ttMove 
+                    && enoughMaterial
                     && Utils.type_of_move(move) != MoveTypeC.PROMOTION && !pos.is_passed_pawn_push(move))
                 {
                     futilityValue = futilityBase + Position.PieceValue[PhaseC.EG][pos.board[move & 0x3F]]
