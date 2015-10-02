@@ -1467,42 +1467,44 @@ namespace Portfish
             var us = this.sideToMove;
             var ksq = this.pieceList[this.sideToMove ^ 1][PieceTypeC.KING][0];
 
-            // Promotion with check ?
-            if (Utils.type_of_move(m) == MoveTypeC.PROMOTION)
+            switch (Utils.type_of_move(m))
             {
-                return (attacks_from((((m >> 12) & 3) + 2), to, this.occupied_squares ^ Utils.SquareBB[from])
-                        & Utils.SquareBB[ksq]) != 0;
-            }
+                case MoveTypeC.PROMOTION:
+                    return (attacks_from((((m >> 12) & 3) + 2), to, this.occupied_squares ^ Utils.SquareBB[from]) & Utils.SquareBB[ksq]) != 0;
+                
+                    // En passant capture with check ? We have already handled the case
+                // of direct checks and ordinary discovered check, the only case we
+                // need to handle is the unusual case of a discovered check through
+                // the captured pawn.
+                case MoveTypeC.ENPASSANT:
+                    {
+                        var capsq = (((from >> 3) << 3) | (to & 7));
+                        var b = (this.occupied_squares ^ Utils.SquareBB[from] ^ Utils.SquareBB[capsq]) | Utils.SquareBB[to];
+                        return ((Utils.rook_attacks_bb(ksq, b)
+                                 & ((this.byTypeBB[PieceTypeC.ROOK] | this.byTypeBB[PieceTypeC.QUEEN]) & this.byColorBB[us]))
+                                != 0)
+                               || ((Utils.bishop_attacks_bb(ksq, b)
+                                    & ((this.byTypeBB[PieceTypeC.BISHOP] | this.byTypeBB[PieceTypeC.QUEEN]) & this.byColorBB[us]))
+                                   != 0);
+                    }
+                case MoveTypeC.CASTLING:
+                    if (Utils.type_of_move(m) == MoveTypeC.CASTLING)
+                    {
+                        var kfrom = from;
+                        var rfrom = to; // 'King captures the rook' notation
+                        var kto = ((rfrom > kfrom ? SquareC.SQ_G1 : SquareC.SQ_C1) ^ (us * 56));
+                        var rto = ((rfrom > kfrom ? SquareC.SQ_F1 : SquareC.SQ_D1) ^ (us * 56));
+                        var b = (this.occupied_squares ^ Utils.SquareBB[kfrom] ^ Utils.SquareBB[rfrom]) | Utils.SquareBB[rto]
+                                | Utils.SquareBB[kto];
+                        return (Utils.rook_attacks_bb(rto, b) & Utils.SquareBB[ksq]) != 0;
+                    }
 
-            // En passant capture with check ? We have already handled the case
-            // of direct checks and ordinary discovered check, the only case we
-            // need to handle is the unusual case of a discovered check through
-            // the captured pawn.
-            if (Utils.type_of_move(m) == MoveTypeC.ENPASSANT)
-            {
-                var capsq = (((from >> 3) << 3) | (to & 7));
-                var b = (this.occupied_squares ^ Utils.SquareBB[from] ^ Utils.SquareBB[capsq]) | Utils.SquareBB[to];
-                return ((Utils.rook_attacks_bb(ksq, b)
-                         & ((this.byTypeBB[PieceTypeC.ROOK] | this.byTypeBB[PieceTypeC.QUEEN]) & this.byColorBB[us]))
-                        != 0)
-                       || ((Utils.bishop_attacks_bb(ksq, b)
-                            & ((this.byTypeBB[PieceTypeC.BISHOP] | this.byTypeBB[PieceTypeC.QUEEN]) & this.byColorBB[us]))
-                           != 0);
+                    Debug.Assert(false);
+                    return false;
+                default:
+                    Debug.Assert(false);
+                    return false;
             }
-
-            // Castling with check ?
-            if (Utils.type_of_move(m) == MoveTypeC.CASTLING)
-            {
-                var kfrom = from;
-                var rfrom = to; // 'King captures the rook' notation
-                var kto = ((rfrom > kfrom ? SquareC.SQ_G1 : SquareC.SQ_C1) ^ (us * 56));
-                var rto = ((rfrom > kfrom ? SquareC.SQ_F1 : SquareC.SQ_D1) ^ (us * 56));
-                var b = (this.occupied_squares ^ Utils.SquareBB[kfrom] ^ Utils.SquareBB[rfrom]) | Utils.SquareBB[rto]
-                        | Utils.SquareBB[kto];
-                return (Utils.rook_attacks_bb(rto, b) & Utils.SquareBB[ksq]) != 0;
-            }
-
-            return false;
         }
 
         /// do_move() makes a move, and saves all information necessary
