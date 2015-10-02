@@ -1303,7 +1303,7 @@ finalize:
                 }
 
                 // Check for legality only before to do the move
-                if (!pos.pl_move_is_legal(move, ci.pinned))
+                if (!RootNode && !SpNode && !pos.pl_move_is_legal(move, ci.pinned))
                 {
                     moveCount--;
                     continue;
