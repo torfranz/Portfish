@@ -122,6 +122,14 @@ namespace Portfish
         internal const int PHASE_ENDGAME = 0, PHASE_MIDGAME = 128, MG = 0, EG = 1, PHASE_NB = 2;
     };
 
+    internal static class CheckTypeC
+    {
+        internal const int
+            NO_CHECK = 0,
+            DIRECT_CHECK = 1,
+            DISCO_CHECK = 2;
+    };
+
     internal static class CastleRightC
     {
         internal const int // Defined as in PolyGlot book hash key

@@ -15,6 +15,7 @@ using Result = System.Int32;
 using ScaleFactor = System.Int32;
 using Phase = System.Int32;
 using CastlingSide = System.Int32;
+using CheckType = System.Int32;
 
 namespace Portfish
 {
@@ -1427,7 +1428,7 @@ namespace Portfish
         }
 
         /// move_gives_check() tests whether a pseudo-legal move gives a check
-        internal bool move_gives_check(int m, CheckInfo ci)
+        internal CheckType move_gives_check(int m, CheckInfo ci)
         {
             Debug.Assert(Utils.is_ok_M(m));
             Debug.Assert(ci.dcCandidates == this.discovered_check_candidates());
@@ -1440,7 +1441,7 @@ namespace Portfish
             // Direct check ?
             if ((ci.checkSq[pt] & Utils.SquareBB[to]) != 0)
             {
-                return true;
+                return CheckTypeC.DIRECT_CHECK;
             }
 
             // Discovery check ?
@@ -1454,14 +1455,14 @@ namespace Portfish
                          & (Utils.SquareBB[from] | Utils.SquareBB[to]
                             | Utils.SquareBB[this.pieceList[this.sideToMove ^ 1][PieceTypeC.KING][0]])) == 0))
                 {
-                    return true;
+                    return CheckTypeC.DISCO_CHECK;
                 }
             }
 
             // Can we skip the ugly special cases ?
             if (Utils.type_of_move(m) == MoveTypeC.NORMAL)
             {
-                return false;
+                return CheckTypeC.NO_CHECK;
             }
 
             var us = this.sideToMove;
@@ -1471,7 +1472,7 @@ namespace Portfish
             if (Utils.type_of_move(m) == MoveTypeC.PROMOTION)
             {
                 return (attacks_from((((m >> 12) & 3) + 2), to, this.occupied_squares ^ Utils.SquareBB[from])
-                        & Utils.SquareBB[ksq]) != 0;
+                        & Utils.SquareBB[ksq]) != 0 ? CheckTypeC.DIRECT_CHECK : CheckTypeC.NO_CHECK;
             }
 
             // En passant capture with check ? We have already handled the case
@@ -1487,7 +1488,7 @@ namespace Portfish
                         != 0)
                        || ((Utils.bishop_attacks_bb(ksq, b)
                             & ((this.byTypeBB[PieceTypeC.BISHOP] | this.byTypeBB[PieceTypeC.QUEEN]) & this.byColorBB[us]))
-                           != 0);
+                           != 0) ? CheckTypeC.DIRECT_CHECK : CheckTypeC.NO_CHECK;
             }
 
             // Castling with check ?
@@ -1499,10 +1500,10 @@ namespace Portfish
                 var rto = ((rfrom > kfrom ? SquareC.SQ_F1 : SquareC.SQ_D1) ^ (us * 56));
                 var b = (this.occupied_squares ^ Utils.SquareBB[kfrom] ^ Utils.SquareBB[rfrom]) | Utils.SquareBB[rto]
                         | Utils.SquareBB[kto];
-                return (Utils.rook_attacks_bb(rto, b) & Utils.SquareBB[ksq]) != 0;
+                return (Utils.rook_attacks_bb(rto, b) & Utils.SquareBB[ksq]) != 0 ? CheckTypeC.DIRECT_CHECK : CheckTypeC.NO_CHECK;
             }
 
-            return false;
+            return CheckTypeC.NO_CHECK;
         }
 
         /// do_move() makes a move, and saves all information necessary
@@ -1519,7 +1520,7 @@ namespace Portfish
             CheckInfoBroker.Free();
         }
 
-        internal void do_move(int m, StateInfo newSt, CheckInfo ci, bool moveIsCheck)
+        internal void do_move(int m, StateInfo newSt, CheckInfo ci, CheckType moveIsCheck)
         {
             Debug.Assert(Utils.is_ok_M(m));
             Debug.Assert(newSt != this.st);
@@ -1740,7 +1741,7 @@ namespace Portfish
             // Update checkers bitboard, piece must be already moved
             this.st.checkersBB = 0;
 
-            if (moveIsCheck)
+            if (moveIsCheck != CheckTypeC.NO_CHECK)
             {
                 if (Utils.type_of_move(m) != MoveTypeC.NORMAL)
                 {
