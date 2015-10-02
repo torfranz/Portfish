@@ -557,7 +557,7 @@ namespace Portfish
 #if X64
                 Bitboard bb = pinners;
                 pinners &= (pinners - 1);
-                b = (Utils.BetweenBB[ksq][(Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * DeBruijn_64) >> 58])]) & occupied_squares;
+                b = (Utils.BetweenBB[ksq][(Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * Utils.DeBruijn_64) >> 58])]) & occupied_squares;
 #else
                 b = (Utils.BetweenBB[ksq][Utils.pop_lsb(ref pinners)]) & this.occupied_squares;
 #endif
@@ -588,7 +588,7 @@ namespace Portfish
 #if X64
                 Bitboard bb = pinners;
                 pinners &= (pinners - 1);
-                b = (Utils.BetweenBB[ksq][(Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * DeBruijn_64) >> 58])]) & occupied_squares;
+                b = (Utils.BetweenBB[ksq][(Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * Utils.DeBruijn_64) >> 58])]) & occupied_squares;
 #else
                 b = (Utils.BetweenBB[ksq][Utils.pop_lsb(ref pinners)]) & this.occupied_squares;
 #endif

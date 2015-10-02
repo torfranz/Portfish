@@ -90,8 +90,46 @@ namespace Portfish
         Timer
     }
 
+    class LimitedSizeDictionary<TKey, TValue> : Dictionary<TKey, TValue>
+    {
+        Queue<TKey> queue;
+        int size;
+
+        public LimitedSizeDictionary(int size) 
+            : base(size + 1)
+        {
+            this.size = size;
+            queue = new Queue<TKey>(size);
+        }
+
+        public void Add(TKey key, TValue value)
+        {
+            base.Add(key, value);
+            if (queue.Count == size)
+                base.Remove(queue.Dequeue());
+            queue.Enqueue(key);
+        }
+
+        public bool Remove(TKey key)
+        {
+            if (base.Remove(key))
+            {
+                Queue<TKey> newQueue = new Queue<TKey>(size);
+                foreach (TKey item in queue)
+                    if (!base.Comparer.Equals(item, key))
+                        newQueue.Enqueue(item);
+                queue = newQueue;
+                return true;
+            }
+            else
+                return false;
+        }
+    }
     internal sealed class Thread
     {
+        const int TableSize = 262144;
+        internal LimitedSizeDictionary<Key, Entry> evalTable = new LimitedSizeDictionary<Key, Entry>(262144);
+
         internal readonly SplitPoint[] splitPoints = new SplitPoint[Constants.MAX_SPLITPOINTS_PER_THREAD];
 
         internal readonly MaterialTable materialTable = new MaterialTable();
