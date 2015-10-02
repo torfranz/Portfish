@@ -1987,8 +1987,8 @@ finalize:
                 && (Position.PieceValue[PhaseC.MG][pos.piece_on(tfrom)] >= Position.PieceValue[PhaseC.MG][pos.piece_on(tto)]
                     || Utils.type_of(pos.piece_on(tfrom)) == PieceTypeC.KING))
             {
-                // Update occupancy as if the piece is moving
-                var occ = Utils.xor_bit(Utils.xor_bit(pos.occupied_squares, mfrom), mto);
+                // Update occupancy as if the piece and the threat are moving
+                var occ = Utils.xor_bit(Utils.xor_bit(Utils.xor_bit(pos.occupied_squares, mfrom), mto), tfrom);
                 Piece piece = pos.piece_on(mfrom);
 
                 // The piece moved in 'to' attacks the square 's' ?
