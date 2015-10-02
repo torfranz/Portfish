@@ -107,7 +107,7 @@ namespace Portfish
                 ci.CreateCheckInfo(pos);
                 var givesCheck = pos.move_gives_check(m, ci);
                 CheckInfoBroker.Free();
-                if (givesCheck == CheckTypeC.NO_CHECK)
+                if (!givesCheck)
                 {
                     return;
                 }

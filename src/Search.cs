@@ -15,7 +15,6 @@ using Result = System.Int32;
 using ScaleFactor = System.Int32;
 using Phase = System.Int32;
 using NodeType = System.Int32;
-using CheckType = System.Int32;
 
 namespace Portfish
 {
@@ -793,8 +792,7 @@ finalize:
             int ext, newDepth;
             int bestValue, value, ttValue;
             int eval = 0, nullValue, futilityValue;
-            bool inCheck, pvMove, singularExtensionNode;
-            CheckType givesCheck;
+            bool inCheck, givesCheck, pvMove, singularExtensionNode;
             bool captureOrPromotion, dangerous, doFullDepthSearch;
             int moveCount = 0, playedMoveCount = 0;
             SplitPoint sp = null;
@@ -1210,7 +1208,7 @@ finalize:
                 ext = DepthC.DEPTH_ZERO;
                 captureOrPromotion = pos.is_capture_or_promotion(move);
                 givesCheck = pos.move_gives_check(move, ci);
-                dangerous = givesCheck != CheckTypeC.NO_CHECK
+                dangerous = givesCheck 
                             || pos.is_passed_pawn_push(move)
                             || Utils.type_of_move(move) == MoveTypeC.CASTLING
                             || (captureOrPromotion // Entering a pawn endgame?
@@ -1225,7 +1223,7 @@ finalize:
                     ext = DepthC.ONE_PLY;
                 }
 
-                else if (givesCheck != CheckTypeC.NO_CHECK && (givesCheck == CheckTypeC.DISCO_CHECK || pos.see(move, true) >= 0))
+                else if (givesCheck && pos.see(move, true) >= 0)
                 {
                     ext = DepthC.ONE_PLY / 2;
                 }
@@ -1345,7 +1343,7 @@ finalize:
                 {
                     alpha = SpNode ? sp.alpha : alpha;
                     value = newDepth < DepthC.ONE_PLY 
-                            ? -qsearch(NodeTypeC.NonPV, givesCheck != CheckTypeC.NO_CHECK, pos, ss, ssPos + 1, -(alpha + 1), -alpha, DepthC.DEPTH_ZERO)
+                            ? -qsearch(NodeTypeC.NonPV, givesCheck, pos, ss, ssPos + 1, -(alpha + 1), -alpha, DepthC.DEPTH_ZERO)
                             : -search(NodeTypeC.NonPV, pos, ss, ssPos + 1, -(alpha + 1), -alpha, newDepth);
                 }
 
@@ -1355,7 +1353,7 @@ finalize:
                 if (PvNode && (pvMove || (value > alpha && (RootNode || value < beta))))
                 {
                     value = newDepth < DepthC.ONE_PLY
-                                ? -qsearch(NodeTypeC.PV, givesCheck != CheckTypeC.NO_CHECK, pos, ss, ssPos + 1, -beta, -alpha, DepthC.DEPTH_ZERO)
+                                ? -qsearch(NodeTypeC.PV, givesCheck, pos, ss, ssPos + 1, -beta, -alpha, DepthC.DEPTH_ZERO)
                                 : -search(NodeTypeC.PV, pos, ss, ssPos + 1, -beta, -alpha, newDepth);
                 }
 
@@ -1566,8 +1564,7 @@ finalize:
             int ttMove, move, bestMove;
             int ttValue, bestValue, value, futilityValue, futilityBase;
 
-            bool enoughMaterial, evasionPrunable, fromNull;
-            CheckType givesCheck;
+            bool givesCheck, enoughMaterial, evasionPrunable, fromNull;
             var tteHasValue = false;
             TTEntry tte;
             uint ttePos = 0;
@@ -1684,7 +1681,7 @@ finalize:
                 // Futility pruning
                 if (!PvNode 
                     && !InCheck 
-                    && givesCheck == CheckTypeC.DISCO_CHECK
+                    && !givesCheck
                     && !fromNull
                     && move != ttMove 
                     && enoughMaterial
@@ -1732,7 +1729,7 @@ finalize:
                 // Don't search useless checks
                 if (!PvNode 
                     && !InCheck 
-                    && givesCheck != CheckTypeC.DISCO_CHECK
+                    && givesCheck 
                     && move != ttMove
                     && !pos.is_capture_or_promotion(move)
                     && ss[ssPos].staticEval + Constants.PawnValueMidgame / 4 < beta
@@ -1755,7 +1752,7 @@ finalize:
                     st = StateInfoBroker.GetObject();
                 }
                 pos.do_move(move, st, ci, givesCheck);
-                value = -qsearch(NT, givesCheck != CheckTypeC.NO_CHECK, pos, ss, ssPos + 1, -beta, -alpha, depth - DepthC.ONE_PLY);
+                value = -qsearch(NT, givesCheck, pos, ss, ssPos + 1, -beta, -alpha, depth - DepthC.ONE_PLY);
                 pos.undo_move(move);
 
                 Debug.Assert(value > -ValueC.VALUE_INFINITE && value < ValueC.VALUE_INFINITE);

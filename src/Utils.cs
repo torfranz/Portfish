@@ -1290,7 +1290,7 @@ namespace Portfish
 
             var ci = CheckInfoBroker.GetObject();
             ci.CreateCheckInfo(pos);
-            if (pos.move_gives_check(m, ci) != CheckTypeC.NO_CHECK)
+            if (pos.move_gives_check(m, ci))
             {
                 var st = new StateInfo();
                 pos.do_move(m, st);
