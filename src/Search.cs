@@ -1057,7 +1057,7 @@ finalize:
                     threatMove = ss[ssPos + 1].currentMove;
 
                     if (depth < 5 * DepthC.ONE_PLY && (ss[ssPos - 1].reduction != 0) && threatMove != MoveC.MOVE_NONE
-                        && connected_moves(pos, ss[ssPos - 1].currentMove, threatMove))
+                        && yields_to_threat(pos, ss[ssPos - 1].currentMove, threatMove))
                     {
                         if (st != null)
                         {
@@ -1876,23 +1876,25 @@ finalize:
             return false;
         }
 
-        // connected_moves() tests whether two moves are 'connected' in the sense
-        // that the first move somehow made the second move possible (for instance
-        // if the moving piece is the same in both moves). The first move is assumed
-        // to be the move that was made to reach the current position, while the
-        // second move is assumed to be a move from the current position.
-        internal static bool connected_moves(Position pos, int m1, int m2)
+        // yields_to_threat() tests whether the move at previous ply yields to the so
+        // called threat move (the best move returned from a null search that fails
+        // low). Here 'yields to' means that the move somehow made the threat possible
+        // for instance if the moving piece is the same in both moves.
+        internal static bool yields_to_threat(Position pos, int move, int threat)
         {
-            Debug.Assert(Utils.is_ok_M(m1));
-            Debug.Assert(Utils.is_ok_M(m2));
+            Debug.Assert(Utils.is_ok_M(move));
+            Debug.Assert(Utils.is_ok_M(threat));
 
 
-            Square t1 = Utils.to_sq(m1);
-            Square f2 = Utils.from_sq(m2);
-            Square t2 = Utils.to_sq(m2);
-            Square f1 = Utils.from_sq(m1);
+            Square t1 = Utils.to_sq(move);
+            Square f1 = Utils.from_sq(move);
+            Square t2 = Utils.to_sq(threat);
+            Square f2 = Utils.from_sq(threat);
 
-            // The moving piece is the same or its destination square was vacated by m1
+            // We are suposed to be called upon returning from a null search
+            Debug.Assert(Utils.color_of(pos.piece_on(f2)) == 1 - pos.sideToMove);
+
+            // The piece is the same or threat's destination was vacated by the move
             if (t1 == f2 || t2 == f1)
             {
                 return true;
@@ -1904,17 +1906,18 @@ finalize:
                 return true;
             }
 
-            // The destination square for m2 is defended by the moving piece in m1
-            Bitboard t1_att = Position.attacks_from(pos.piece_on(t1), t1, pos.occupied_squares ^ (ulong)f2);
-            if ((t1_att & (ulong)t2) != 0)
+            // Threat's destination is defended by the move's piece
+            Bitboard t1_att = Position.attacks_from(pos.piece_on(t1), t1, pos.pieces() ^ (ulong)f2);
+            if (Utils.bit_is_set(t1_att, t2) != 0)
             {
                 return true;
             }
 
-            // Discovered check, checking piece is the piece moved in m1
-            Square ksq = pos.king_square(pos.sideToMove);
-            if (((t1_att & (ulong)ksq) != 0) && ((Utils.between_bb(t1, ksq) & (ulong)f2) != 0))
+            // Threat gives a discovered check through the move's checking piece
+            if (Utils.bit_is_set(t1_att, pos.king_square(pos.sideToMove)) != 0 &&
+                Utils.bit_is_set(Utils.between_bb(t1, pos.king_square(pos.sideToMove)), f2) != 0) // TODO: removing condition asserts below
             {
+                Debug.Assert(Utils.bit_is_set(Utils.between_bb(t1, pos.king_square(pos.sideToMove)), f2) != 0);
                 return true;
             }
 
