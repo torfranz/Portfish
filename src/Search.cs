@@ -1883,47 +1883,37 @@ finalize:
         // second move is assumed to be a move from the current position.
         internal static bool connected_moves(Position pos, int m1, int m2)
         {
-            int f1, t1, f2, t2;
-            int p1, p2;
-            int ksq;
-
             Debug.Assert(Utils.is_ok_M(m1));
             Debug.Assert(Utils.is_ok_M(m2));
 
-            // Case 1: The moving piece is the same in both moves
-            f2 = Utils.from_sq(m2);
-            t1 = Utils.to_sq(m1);
-            if (f2 == t1)
+
+            Square t1 = Utils.to_sq(m1);
+            Square f2 = Utils.from_sq(m2);
+            Square t2 = Utils.to_sq(m2);
+            Square f1 = Utils.from_sq(m1);
+
+            // The moving piece is the same or its destination square was vacated by m1
+            if (t1 == f2 || t2 == f1)
             {
                 return true;
             }
 
-            // Case 2: The destination square for m2 was vacated by m1
-            t2 = Utils.to_sq(m2);
-            f1 = Utils.from_sq(m1);
-            if (t2 == f1)
+            // Moving through the vacated square
+            if (piece_is_slider(pos.piece_on(f2)) && (Utils.bit_is_set(Utils.between_bb(f2, t2), f1) != 0))
             {
                 return true;
             }
 
-            // Case 3: Moving through the vacated square
-            p2 = pos.piece_on(f2);
-            if (piece_is_slider(p2) && (Utils.bit_is_set(Utils.between_bb(f2, t2), f1) != 0))
+            // The destination square for m2 is defended by the moving piece in m1
+            Bitboard t1_att = Position.attacks_from(pos.piece_on(t1), t1, pos.pieces() ^ (ulong)f2);
+            if ((t1_att & (ulong)t2) != 0)
             {
                 return true;
             }
 
-            // Case 4: The destination square for m2 is defended by the moving piece in m1
-            p1 = pos.piece_on(t1);
-            if ((Position.attacks_from(p1, t1, pos.pieces() ^ (ulong)f2) & (ulong)t2) != 0)
-            {
-                return true;
-            }
-
-            // Case 5: Discovered check, checking piece is the piece moved in m1
-            ksq = pos.king_square(pos.sideToMove);
-            if (piece_is_slider(p1) && (Utils.bit_is_set(Utils.between_bb(t1, ksq), f2) != 0)
-                && (Utils.bit_is_set(Position.attacks_from(p1, t1, Utils.xor_bit(pos.pieces(), f2)), ksq) != 0))
+            // Discovered check, checking piece is the piece moved in m1
+            Square ksq = pos.king_square(pos.sideToMove);
+            if (((t1_att & (ulong)ksq) != 0) && ((Utils.between_bb(t1, ksq) & (ulong)f2) != 0))
             {
                 return true;
             }
