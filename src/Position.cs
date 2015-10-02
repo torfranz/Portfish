@@ -242,6 +242,15 @@ namespace Portfish
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #endif
 
+        internal ulong pieces()
+        {
+            return this.byTypeBB[PieceTypeC.AllPieces];
+        }
+
+#if AGGR_INLINE
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#endif
+
         internal ulong pieces_PT(int pt)
         {
             return this.byTypeBB[pt];

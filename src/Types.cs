@@ -180,7 +180,7 @@ namespace Portfish
 
     internal static class PieceTypeC
     {
-        internal const int NO_PIECE_TYPE = 0, PAWN = 1, KNIGHT = 2, BISHOP = 3, ROOK = 4, QUEEN = 5, KING = 6, PIECE_TYPE_NB = 8;
+        internal const int AllPieces = 0, NO_PIECE_TYPE = 0, PAWN = 1, KNIGHT = 2, BISHOP = 3, ROOK = 4, QUEEN = 5, KING = 6, PIECE_TYPE_NB = 8;
     };
 
     internal static class PieceC
