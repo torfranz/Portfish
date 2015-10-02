@@ -962,7 +962,7 @@ finalize:
                 && !pos.pawn_on_7th(pos.sideToMove))
             {
                 var rbeta = beta - razor_margin(depth);
-                var v = qsearch(NodeTypeC.NonPV, pos, ss, ssPos, rbeta - 1, rbeta, DepthC.DEPTH_ZERO);
+                var v = qsearch(NodeTypeC.NonPV, false, pos, ss, ssPos, rbeta - 1, rbeta, DepthC.DEPTH_ZERO);
                 if (v < rbeta)
                 {
                     // Logically we should return (v + razor_margin(depth)), but
@@ -1005,7 +1005,7 @@ finalize:
                 pos.do_null_move(true, st);
                 ss[ssPos + 1].skipNullMove = 1;
                 
-                nullValue = depth - R < DepthC.ONE_PLY ? -qsearch(NodeTypeC.NonPV, pos, ss, ssPos + 1, -beta, -alpha, DepthC.DEPTH_ZERO)
+                nullValue = depth - R < DepthC.ONE_PLY ? -qsearch(NodeTypeC.NonPV, false, pos, ss, ssPos + 1, -beta, -alpha, DepthC.DEPTH_ZERO)
                                       : -search(NodeTypeC.NonPV, pos, ss, ssPos + 1, -beta, -alpha, depth - R);
 
                 ss[ssPos + 1].skipNullMove = 0;
@@ -1356,9 +1356,9 @@ finalize:
                 if (doFullDepthSearch)
                 {
                     alpha = SpNode ? sp.alpha : alpha;
-                    value = newDepth < DepthC.ONE_PLY
-                                ? -qsearch(NodeTypeC.NonPV, pos, ss, ssPos + 1, -(alpha + 1), -alpha, DepthC.DEPTH_ZERO)
-                                : -search(NodeTypeC.NonPV, pos, ss, ssPos + 1, -(alpha + 1), -alpha, newDepth);
+                    value = newDepth < DepthC.ONE_PLY 
+                            ? -qsearch(NodeTypeC.NonPV, givesCheck, pos, ss, ssPos + 1, -(alpha + 1), -alpha, DepthC.DEPTH_ZERO)
+                            : -search(NodeTypeC.NonPV, pos, ss, ssPos + 1, -(alpha + 1), -alpha, newDepth);
                 }
 
                 // Only for PV nodes do a full PV search on the first move or after a fail
@@ -1367,7 +1367,7 @@ finalize:
                 if (PvNode && (pvMove || (value > alpha && (RootNode || value < beta))))
                 {
                     value = newDepth < DepthC.ONE_PLY
-                                ? -qsearch(NodeTypeC.PV, pos, ss, ssPos + 1, -beta, -alpha, DepthC.DEPTH_ZERO)
+                                ? -qsearch(NodeTypeC.PV, givesCheck, pos, ss, ssPos + 1, -beta, -alpha, DepthC.DEPTH_ZERO)
                                 : -search(NodeTypeC.PV, pos, ss, ssPos + 1, -beta, -alpha, newDepth);
                 }
 
@@ -1558,11 +1558,12 @@ finalize:
         // qsearch() is the quiescence search function, which is called by the main
         // search function when the remaining depth is zero (or, to be more precise,
         // less than ONE_PLY).
-        private static int qsearch(int NT, Position pos, Stack[] ss, int ssPos, int alpha, int beta, int depth)
+        private static int qsearch(int NT, bool InCheck, Position pos, Stack[] ss, int ssPos, int alpha, int beta, int depth)
         {
             var PvNode = (NT == NodeTypeC.PV);
 
             Debug.Assert(NT == NodeTypeC.PV || NT == NodeTypeC.NonPV);
+            Debug.Assert(InCheck == pos.in_check());
             Debug.Assert(alpha >= -ValueC.VALUE_INFINITE && alpha < beta && beta <= ValueC.VALUE_INFINITE);
             Debug.Assert(PvNode || (alpha == beta - 1));
             Debug.Assert(depth <= DepthC.DEPTH_ZERO);
@@ -1571,14 +1572,12 @@ finalize:
             int ttMove, move, bestMove;
             int ttValue, bestValue, value, futilityValue, futilityBase;
 
-            bool inCheck, enoughMaterial, givesCheck, evasionPrunable;
+            bool enoughMaterial, givesCheck, evasionPrunable;
             var tteHasValue = false;
             TTEntry tte;
             uint ttePos = 0;
             int ttDepth;
             Key posKey;
-
-            inCheck = pos.in_check();
 
             ss[ssPos].currentMove = bestMove = MoveC.MOVE_NONE;
             ss[ssPos].ply = ss[ssPos - 1].ply + 1;
@@ -1599,7 +1598,7 @@ finalize:
             // Decide whether or not to include checks, this fixes also the type of
             // TT entry depth that we are going to use. Note that in qsearch we use
             // only two types of depth in TT: DEPTH_QS_CHECKS or DEPTH_QS_NO_CHECKS.
-            ttDepth = (inCheck || depth >= DepthC.DEPTH_QS_CHECKS ? DepthC.DEPTH_QS_CHECKS : DepthC.DEPTH_QS_NO_CHECKS);
+            ttDepth = (InCheck || depth >= DepthC.DEPTH_QS_CHECKS ? DepthC.DEPTH_QS_CHECKS : DepthC.DEPTH_QS_NO_CHECKS);
             
             if (tteHasValue 
                 && tte.depth() >= depth
@@ -1613,7 +1612,7 @@ finalize:
             }
 
             // Evaluate the position statically
-            if (inCheck)
+            if (InCheck)
             {
                 ss[ssPos].staticEval = ss[ssPos].evalMargin = ValueC.VALUE_NONE;
                 bestValue = futilityBase = -ValueC.VALUE_INFINITE;
@@ -1682,7 +1681,7 @@ finalize:
                 givesCheck = pos.move_gives_check(move, ci);
 
                 // Futility pruning
-                if (!PvNode && !inCheck && !givesCheck && move != ttMove && enoughMaterial
+                if (!PvNode && !InCheck && !givesCheck && move != ttMove && enoughMaterial
                     && Utils.type_of_move(move) != MoveTypeC.PROMOTION && !pos.is_passed_pawn_push(move))
                 {
                     futilityValue = futilityBase + Position.PieceValue[PhaseC.EG][pos.board[move & 0x3F]]
@@ -1709,7 +1708,7 @@ finalize:
 
                 // Detect non-capture evasions that are candidate to be pruned
                 evasionPrunable = !PvNode 
-                                    && inCheck 
+                                    && InCheck 
                                     && bestValue > ValueC.VALUE_MATED_IN_MAX_PLY
                                     && !pos.is_capture(move)
                                     && (pos.can_castle_C(pos.sideToMove) == 0);
@@ -1717,7 +1716,7 @@ finalize:
                 // Don't search moves with negative SEE values
                 if (!PvNode 
                     && move != ttMove 
-                    && (!inCheck || evasionPrunable) 
+                    && (!InCheck || evasionPrunable) 
                     && Utils.type_of_move(move) != MoveTypeC.PROMOTION
                     && pos.see(move, true) < 0)
                 {
@@ -1726,7 +1725,7 @@ finalize:
 
                 // Don't search useless checks
                 if (!PvNode 
-                    && !inCheck 
+                    && !InCheck 
                     && givesCheck 
                     && move != ttMove
                     && !pos.is_capture_or_promotion(move)
@@ -1750,7 +1749,7 @@ finalize:
                     st = StateInfoBroker.GetObject();
                 }
                 pos.do_move(move, st, ci, givesCheck);
-                value = -qsearch(NT, pos, ss, ssPos + 1, -beta, -alpha, depth - DepthC.ONE_PLY);
+                value = -qsearch(NT, givesCheck, pos, ss, ssPos + 1, -beta, -alpha, depth - DepthC.ONE_PLY);
                 pos.undo_move(move);
 
                 Debug.Assert(value > -ValueC.VALUE_INFINITE && value < ValueC.VALUE_INFINITE);
@@ -1787,7 +1786,7 @@ finalize:
 
             // All legal moves have been searched. A special case: If we're in check
             // and no legal moves were found, it is checkmate.
-            if (inCheck && bestValue == -ValueC.VALUE_INFINITE)
+            if (InCheck && bestValue == -ValueC.VALUE_INFINITE)
             {
                 if (st != null)
                 {
