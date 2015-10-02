@@ -1623,6 +1623,11 @@ finalize:
                         ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                     }
                 }
+                else if (ss[ssPos - 1].currentMove == MoveC.MOVE_NULL)
+                {
+                    ss[ssPos].staticEval = bestValue = -ss[ssPos - 1].staticEval;
+                    ss[ssPos].evalMargin = ValueC.VALUE_ZERO; // Hack, we really don't know the value
+                }
                 else
                 {
                     ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
