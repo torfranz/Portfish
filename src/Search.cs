@@ -287,20 +287,6 @@ namespace Portfish
 
         internal static readonly RKISS rk = new RKISS();
 
-        /// Constants
-
-        // Lookup table to check if a Piece is a slider and its access function
-        internal static readonly bool[] Slidings = new bool[18]
-                                                       {
-                                                           false, false, false, true, true, true, false, false, false,
-                                                           false, false, true, true, true, false, false, false, false
-                                                       };
-
-        internal static bool piece_is_slider(int p)
-        {
-            return Slidings[p];
-        }
-
         // Dynamic razoring margin based on depth
         internal static int razor_margin(int d)
         {
@@ -2002,9 +1988,8 @@ finalize:
                 }
             }
 
-            // If the threat piece is a slider, don't prune safe moves which block it
-            if (piece_is_slider(pos.piece_on(tfrom)) && (Utils.bit_is_set(Utils.between_bb(tfrom, tto), mto) != 0)
-                && pos.see(move, true) >= 0)
+            // Don't prune safe moves which block the threat path
+            if ((Utils.bit_is_set(Utils.between_bb(tfrom, tto), mto) != 0) && pos.see(move, true) >= 0)
             {
                 return true;
             }
