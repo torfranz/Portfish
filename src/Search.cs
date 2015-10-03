@@ -156,7 +156,7 @@ namespace Portfish
             TTEntry tte;
             bool tteHasValue;
             
-            int v, m = 0;
+            int m = 0;
             var ply = 0;
             uint ttePos = 0;
             
@@ -166,16 +166,7 @@ namespace Portfish
 
                 if ((!tteHasValue) || tte.move() != this.pv[ply]) // Don't overwrite existing correct entries
                 {
-                    if (pos.in_check())
-                    {
-                        v = m = ValueC.VALUE_NONE;
-                    }
-                    else
-                    {
-                        v = Evaluate.do_evaluate(false, pos, ref m);
-                    }
-
-                    TT.store(pos.key(), ValueC.VALUE_NONE, Bound.BOUND_NONE, DepthC.DEPTH_NONE, this.pv[ply], v, m);
+                    TT.store(pos.key(), ValueC.VALUE_NONE, Bound.BOUND_NONE, DepthC.DEPTH_NONE, this.pv[ply]);
                 }
 
                 Debug.Assert(pos.move_is_legal(pv[ply]));
@@ -1487,9 +1478,7 @@ finalize:
                     value_to_tt(bestValue, ss[ssPos].ply),
                     Bound.BOUND_LOWER,
                     depth,
-                    bestMove,
-                    ss[ssPos].staticEval,
-                    ss[ssPos].evalMargin);
+                    bestMove);
 
                 if (!pos.is_capture_or_promotion(bestMove) && !inCheck)
                 {
@@ -1513,7 +1502,7 @@ finalize:
             }
             else // Failed low or PV search
             {
-                TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, depth, bestMove, ss[ssPos].staticEval, ss[ssPos].evalMargin);
+                TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, depth, bestMove);
             }
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
@@ -1613,9 +1602,7 @@ finalize:
                             value_to_tt(bestValue, ss[ssPos].ply),
                             Bound.BOUND_LOWER,
                             DepthC.DEPTH_NONE,
-                            MoveC.MOVE_NONE,
-                            ss[ssPos].staticEval,
-                            ss[ssPos].evalMargin);
+                            MoveC.MOVE_NONE);
                     }
 
                     return bestValue;
@@ -1738,8 +1725,7 @@ finalize:
                         }
                         else // Fail high
                         {
-                            TT.store(posKey, value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, 
-                                ttDepth, move, ss[ssPos].staticEval, ss[ssPos].evalMargin);
+                            TT.store(posKey, value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, ttDepth, move);
 
                             if (st != null)
                             {
@@ -1769,9 +1755,8 @@ finalize:
             }
 
             TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply),
-                    PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
-                    //PvNode && bestMove > oldAlpha ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, // TODO: this line asserts in bench
-                    ttDepth, bestMove, ss[ssPos].staticEval, ss[ssPos].evalMargin);
+                    PvNode && bestMove > oldAlpha ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
+                    ttDepth, bestMove);
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
 
