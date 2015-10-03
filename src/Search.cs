@@ -166,7 +166,7 @@ namespace Portfish
 
                 if ((!tteHasValue) || tte.move() != this.pv[ply]) // Don't overwrite existing correct entries
                 {
-                    TT.store(pos.key(), ValueC.VALUE_NONE, Bound.BOUND_NONE, DepthC.DEPTH_NONE, this.pv[ply]);
+                    TT.store(pos.key(), ValueC.VALUE_NONE, Bound.BOUND_NONE, DepthC.DEPTH_NONE, this.pv[ply], ValueC.VALUE_NONE, ValueC.VALUE_NONE);
                 }
 
                 Debug.Assert(pos.move_is_legal(pv[ply]));
@@ -794,7 +794,7 @@ finalize:
 
             // Step 1. Initialize node
             var thisThread = pos.this_thread();
-            
+            var threatExtension = false;
             inCheck = pos.in_check();
             
             if (SpNode)
@@ -890,10 +890,23 @@ finalize:
             {
                 ss[ssPos].staticEval = ss[ssPos].evalMargin = eval = ValueC.VALUE_NONE;
             }
-            else
+            else if(tteHasValue)
             {
                 eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
-                
+
+                // Following asserts are valid only in single thread condition because
+                // TT access is always racy and its contents cannot be trusted.
+                Debug.Assert(tte.static_value() != ValueC.VALUE_NONE || Threads.size() > 1);
+                Debug.Assert(ttValue != ValueC.VALUE_NONE || tte.type() == Bound.BOUND_NONE || Threads.size() > 1);
+
+                ss[ssPos].staticEval = eval = tte.static_value();
+                ss[ssPos]. evalMargin = tte.static_value_margin();
+
+                if (eval == ValueC.VALUE_NONE || ss[ssPos].evalMargin == ValueC.VALUE_NONE) // Due to a race
+                {
+                    eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
+                }
+
                 // Can ttValue be used as a better position evaluation?
                 if (tteHasValue && ttValue != ValueC.VALUE_NONE)
                 {
@@ -903,7 +916,13 @@ finalize:
                         eval = ttValue;
                     }
                 }
-           }
+            }
+            else
+            {
+                eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
+                TT.store(posKey, ValueC.VALUE_NONE, Bound.BOUND_NONE, DepthC.DEPTH_NONE, MoveC.MOVE_NONE,
+                         ss[ssPos].staticEval, ss[ssPos].evalMargin);
+            }
 
             // Update gain for the parent non-capture move given the static position
             // evaluation before and after the move.
@@ -1009,21 +1028,16 @@ finalize:
                     // The null move failed low, which means that we may be faced with
                     // some kind of threat. If the previous move was reduced, check if
                     // the move that refuted the null move was somehow connected to the
-                    // move which was reduced. If a connection is found, return a fail
-                    // low score (which will cause the reduced move to fail high in the
-                    // parent node, which will trigger a re-search with full depth).
+                    // move which was reduced. If a connection is found extend moves that
+                    // defend against threat.
                     threatMove = ss[ssPos + 1].currentMove;
 
-                    if (depth < 5 * DepthC.ONE_PLY && (ss[ssPos - 1].reduction != 0) && threatMove != MoveC.MOVE_NONE
-                        && yields_to_threat(pos, ss[ssPos - 1].currentMove, threatMove))
+                    if (depth < 5 * DepthC.ONE_PLY 
+                        && (ss[ssPos - 1].reduction != 0) 
+                        && threatMove != MoveC.MOVE_NONE
+                        && allows_move(pos, ss[ssPos - 1].currentMove, threatMove))
                     {
-                        if (st != null)
-                        {
-                            st.previous = null;
-                            StateInfoBroker.Free();
-                        }
-                        MovesSearchedBroker.Free();
-                        return beta - 1;
+                        threatExtension = true;
                     }
                 }
             }
@@ -1194,7 +1208,10 @@ finalize:
                 {
                     ext = DepthC.ONE_PLY;
                 }
-
+                else if (threatExtension && prevents_move(pos, move, threatMove))
+                {
+                    ext = DepthC.ONE_PLY;
+                }
                 else if (givesCheck && pos.see(move, true) >= 0)
                 {
                     ext = DepthC.ONE_PLY / 2;
@@ -1231,7 +1248,7 @@ finalize:
                     // Move count based pruning
                     if (depth < 16 * DepthC.ONE_PLY
                         && moveCount >= FutilityMoveCounts[depth]
-                        && ((threatMove == 0) || !prevents_threat(pos, move, threatMove)))
+                        && ((threatMove == 0) || !prevents_move(pos, move, threatMove)))
                     {
                         if (SpNode)
                         {
@@ -1479,7 +1496,8 @@ finalize:
                     value_to_tt(bestValue, ss[ssPos].ply),
                     Bound.BOUND_LOWER,
                     depth,
-                    bestMove);
+                    bestMove,
+                    ss[ssPos].staticEval, ss[ssPos].evalMargin);
 
                 if (!pos.is_capture_or_promotion(bestMove) && !inCheck)
                 {
@@ -1503,7 +1521,11 @@ finalize:
             }
             else // Failed low or PV search
             {
-                TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, depth, bestMove);
+                TT.store(posKey, 
+                    value_to_tt(bestValue, ss[ssPos].ply), 
+                    PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, depth, bestMove, 
+                    ss[ssPos].staticEval, 
+                    ss[ssPos].evalMargin);
             }
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
@@ -1599,6 +1621,18 @@ finalize:
                     ss[ssPos].staticEval = bestValue = -ss[ssPos - 1].staticEval;
                     ss[ssPos].evalMargin = ValueC.VALUE_ZERO;
                 }
+                else if (tteHasValue)
+                {
+                    Debug.Assert(tte.static_value() != ValueC.VALUE_NONE || Threads.size() > 1);
+
+                    ss[ssPos].staticEval = bestValue = tte.static_value();
+                    ss[ssPos].evalMargin = tte.static_value_margin();
+
+                    if (ss[ssPos].staticEval == ValueC.VALUE_NONE || ss[ssPos].evalMargin == ValueC.VALUE_NONE) // Due to a race
+                    {
+                        ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
+                    }
+                }
                 else
                 {
                     ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
@@ -1614,7 +1648,9 @@ finalize:
                             value_to_tt(bestValue, ss[ssPos].ply),
                             Bound.BOUND_LOWER,
                             DepthC.DEPTH_NONE,
-                            MoveC.MOVE_NONE);
+                            MoveC.MOVE_NONE,
+                            ss[ssPos].staticEval,
+                            ss[ssPos].evalMargin);
                     }
 
                     return bestValue;
@@ -1738,7 +1774,7 @@ finalize:
                         }
                         else // Fail high
                         {
-                            TT.store(posKey, value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, ttDepth, move);
+                            TT.store(posKey, value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, ttDepth, move, ss[ssPos].staticEval, ss[ssPos].evalMargin);
 
                             if (st != null)
                             {
@@ -1769,7 +1805,7 @@ finalize:
 
             TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply),
                     PvNode && bestMove > oldAlpha ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
-                    ttDepth, bestMove);
+                    ttDepth, bestMove, ss[ssPos].staticEval, ss[ssPos].evalMargin);
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
 
@@ -1845,46 +1881,46 @@ finalize:
             return false;
         }
 
-        // yields_to_threat() tests whether the move at previous ply yields to the so
-        // called threat move (the best move returned from a null search that fails
-        // low). Here 'yields to' means that the move somehow made the threat possible
-        // for instance if the moving piece is the same in both moves.
-        internal static bool yields_to_threat(Position pos, int move, int threat)
+        // allows_move() tests whether the move at previous ply(first) somehow makes a
+        // second move possible, for instance if the moving piece is the same in both
+        // moves. Normally the second move is the threat move (the best move returned
+        // from a null search that fails low).
+        internal static bool allows_move(Position pos, int first, int second)
         {
-            Debug.Assert(Utils.is_ok_M(move));
-            Debug.Assert(Utils.is_ok_M(threat));
-            Debug.Assert(Utils.color_of(pos.piece_on(Utils.from_sq(threat))) == 1 - pos.sideToMove);
+            Debug.Assert(Utils.is_ok_M(first));
+            Debug.Assert(Utils.is_ok_M(second));
+            Debug.Assert(Utils.color_of(pos.piece_on(Utils.from_sq(second))) == 1 - pos.sideToMove);
 
-            Square mto = Utils.to_sq(move);
-            Square mfrom = Utils.from_sq(move);
-            Square tto = Utils.to_sq(threat);
-            Square tfrom = Utils.from_sq(threat);
+            Square m1to = Utils.to_sq(first);
+            Square m1from = Utils.from_sq(first);
+            Square m2to = Utils.to_sq(second);
+            Square m2from = Utils.from_sq(second);
 
-            
-            // The piece is the same or threat's destination was vacated by the move
-            if (mto == tfrom || tto == mfrom)
+
+            // The piece is the same or second's destination was vacated by the first move
+            if (m1to == m2from || m2to == m1from)
             {
                 return true;
             }
 
-            // Moving through the vacated square
-            if (Utils.bit_is_set(Utils.between_bb(tfrom, tto), mfrom) != 0)
+            // Second one moves through the square vacated by first one
+            if (Utils.bit_is_set(Utils.between_bb(m2from, m2to), m1from) != 0)
             {
                 return true;
             }
 
-            // Threat's destination is defended by the move's piece
-            Bitboard matt = Position.attacks_from(pos.piece_on(mto), mto, pos.pieces() ^ (ulong)tfrom);
-            if (Utils.bit_is_set(matt , tto) != 0)
+            // Second's destination is defended by the first move's piece
+            Bitboard m1att = Position.attacks_from(pos.piece_on(m1to), m1to, pos.pieces() ^ (ulong)m2from);
+            if (Utils.bit_is_set(m1att , m2to) != 0)
             {
                 return true;
             }
 
-            // Threat gives a discovered check through the move's checking piece
-            if (Utils.bit_is_set(matt , pos.king_square(pos.sideToMove)) != 0 &&
-                Utils.bit_is_set(Utils.between_bb(mto, pos.king_square(pos.sideToMove)), tfrom) != 0) // TODO: removing condition asserts below
+            // Second move gives a discovered check through the first's checking piece
+            if (Utils.bit_is_set(m1att , pos.king_square(pos.sideToMove)) != 0 &&
+                Utils.bit_is_set(Utils.between_bb(m1to, pos.king_square(pos.sideToMove)), m2from) != 0) // TODO: removing condition asserts below
             {
-                Debug.Assert(Utils.bit_is_set(Utils.between_bb(mto, pos.king_square(pos.sideToMove)), tfrom) != 0);
+                Debug.Assert(Utils.bit_is_set(Utils.between_bb(m1to, pos.king_square(pos.sideToMove)), m2from) != 0);
                 return true;
             }
 
@@ -1923,13 +1959,11 @@ finalize:
         // prevents_threat() tests whether a move is able to defend against the so
         // called threat move (the best move returned from a null search that fails
         // low). In this case will not be pruned.
-        private static bool prevents_threat(Position pos, int move, int threat)
+        private static bool prevents_move(Position pos, int move, int threat)
         {
             Debug.Assert(Utils.is_ok_M(move));
             Debug.Assert(Utils.is_ok_M(threat));
-            Debug.Assert(!pos.is_capture_or_promotion(move));
-            Debug.Assert(!pos.is_passed_pawn_push(move));
-
+            
             Square mfrom = Utils.from_sq(move);
             Square mto = Utils.to_sq(move);
             Square tfrom = Utils.from_sq(threat);

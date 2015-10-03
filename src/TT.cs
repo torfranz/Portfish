@@ -48,7 +48,7 @@ namespace Portfish
 
         internal short value16, depth16, staticValue, staticMargin;
 
-        internal void save(uint k, int v, Bound t, int d, int m, int g)
+        internal void save(uint k, int v, Bound t, int d, int m, int g, Value statV, Value statM)
         {
             this.key = k;
             this.move16 = (ushort)m;
@@ -56,6 +56,8 @@ namespace Portfish
             this.generation8 = (byte)g;
             this.value16 = (short)v;
             this.depth16 = (short)d;
+            this.staticValue = (short)statV;
+            this.staticMargin = (short)statM;
         }
 
         internal void set_generation(int g)
@@ -160,7 +162,7 @@ namespace Portfish
         /// it replaces the least valuable of entries. A TTEntry t1 is considered to be
         /// more valuable than a TTEntry t2 if t1 is from the current search and t2 is from
         /// a previous search, or if the depth of t1 is bigger than the depth of t2.
-        internal static void store(ulong posKey, int v, Bound t, int d, int m)
+        internal static void store(ulong posKey, int v, Bound t, int d, int m, Value statV, Value kingD)
         {
             var posKey32 = (uint)(posKey >> 32); // Use the high 32 bits as key inside the cluster
             uint ttePos = 0;
@@ -179,7 +181,7 @@ namespace Portfish
                         m = tte.move16;
                     }
 
-                    entries[ttePos].save(posKey32, v, t, d, m, generation);
+                    entries[ttePos].save(posKey32, v, t, d, m, generation, statV, kingD);
                     return;
                 }
 
@@ -220,7 +222,7 @@ namespace Portfish
 
                 ttePos++;
             }
-            entries[replacePos].save(posKey32, v, t, d, m, generation);
+            entries[replacePos].save(posKey32, v, t, d, m, generation, statV, kingD);
         }
 
         /// TranspositionTable::probe() looks up the current position in the

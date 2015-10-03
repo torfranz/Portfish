@@ -90,6 +90,7 @@ namespace Portfish
         Timer
     }
 
+    /*
     class LimitedSizeDictionary<TKey, TValue> : Dictionary<TKey, TValue>
     {
         Queue<TKey> queue;
@@ -125,11 +126,10 @@ namespace Portfish
                 return false;
         }
     }
+    */
+
     internal sealed class Thread
     {
-        const int TableSize = 262144;
-        internal LimitedSizeDictionary<Key, Entry> evalTable = new LimitedSizeDictionary<Key, Entry>(262144);
-
         internal readonly SplitPoint[] splitPoints = new SplitPoint[Constants.MAX_SPLITPOINTS_PER_THREAD];
 
         internal readonly MaterialTable materialTable = new MaterialTable();

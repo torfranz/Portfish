@@ -14,14 +14,6 @@ namespace Portfish
     using System.Runtime.CompilerServices;
     using System.Text;
 
-    internal class Entry
-    {
-        internal Key key;
-        internal Value value;
-        internal short marginsWHITE;
-        internal short marginsBLACK;        
-    };
-
     internal sealed class EvalInfo
     {
         // attackedBy[color][piece type] is a bitboard representing all squares
@@ -414,35 +406,12 @@ namespace Portfish
             Debug.Assert(!pos.in_check());
 
             var ei = EvalInfoBroker.GetObject();
-
+            Value marginsWHITE, marginsBLACK;
             int score = 0, mobilityWhite = 0, mobilityBlack = 0;
-
-            Key key = pos.key();
-            Entry e;
-            if(!pos.this_thread().evalTable.TryGetValue(key, out e))
-            {
-                e = new Entry();
-                pos.this_thread().evalTable.Add(key, e);
-            }
-            
-            // If e->key matches the position's hash key, it means that we have analysed
-            // this node before, and we can simply return the information we found the last
-            // time instead of recomputing it.
-            if (e.key == key)
-            {
-                margin = pos.sideToMove == ColorC.WHITE ? e.marginsWHITE : e.marginsBLACK;
-                ei.pi = null;
-                ei.mi = null;
-                EvalInfoBroker.Free();
-                return e.value;
-            }
-           
-             // Otherwise we overwrite current content with this node info.
-            e.key = key;
 
             // margins[] store the uncertainty estimation of position's evaluation
             // that typically is used by the search for pruning decisions.
-            e.marginsWHITE = e.marginsBLACK = ValueC.VALUE_ZERO;
+            marginsWHITE = marginsBLACK = ValueC.VALUE_ZERO;
 
             // Initialize score by reading the incrementally updated scores included
             // in the position object (material + piece square tables) and adding
@@ -458,11 +427,11 @@ namespace Portfish
             if (ei.mi.evaluationFunction != null)
             {
                 margin = ValueC.VALUE_ZERO;
-                e.value = ei.mi.evaluationFunction(ei.mi.evaluationFunctionColor, pos);
+                var value = ei.mi.evaluationFunction(ei.mi.evaluationFunctionColor, pos);
                 ei.pi = null;
                 ei.mi = null;
                 EvalInfoBroker.Free();
-                return e.value;
+                return value;
             }
 
             // Probe the pawn hash table
@@ -484,8 +453,8 @@ namespace Portfish
 
             // Evaluate kings after all other pieces because we need complete attack
             // information when computing the king safety evaluation.
-            score += evaluate_king(ColorC.WHITE, Trace, pos, ei, ref e.marginsWHITE, ref e.marginsBLACK)
-                     - evaluate_king(ColorC.BLACK, Trace, pos, ei, ref e.marginsWHITE, ref e.marginsBLACK);
+            score += evaluate_king(ColorC.WHITE, Trace, pos, ei, ref marginsWHITE, ref marginsBLACK)
+                     - evaluate_king(ColorC.BLACK, Trace, pos, ei, ref marginsWHITE, ref marginsBLACK);
 
             // Evaluate tactical threats, we need full attack information including king
             score += evaluate_threats(ColorC.WHITE, pos, ei) - evaluate_threats(ColorC.BLACK, pos, ei);
@@ -545,7 +514,7 @@ namespace Portfish
             }
 
             // Interpolate between the middle game and the endgame score
-            margin = pos.sideToMove == ColorC.WHITE ? e.marginsWHITE : e.marginsBLACK;
+            margin = pos.sideToMove == ColorC.WHITE ? marginsWHITE : marginsBLACK;
 
             // interpolate
             Value v = interpolate(score, ei.mi.game_phase(), sf);
@@ -578,9 +547,9 @@ namespace Portfish
                 trace_add(TracedTypeC.TOTAL, score);
 
                 TraceStream.Append("\nUncertainty margin: White: ");
-                TraceStream.Append(FormatDouble(to_cp(e.marginsWHITE), null, true));
+                TraceStream.Append(FormatDouble(to_cp(marginsWHITE), null, true));
                 TraceStream.Append(", Black: ");
-                TraceStream.Append(FormatDouble(to_cp(e.marginsBLACK), null, true));
+                TraceStream.Append(FormatDouble(to_cp(marginsBLACK), null, true));
                 TraceStream.Append("\nScaling: ");
                 TraceStream.Append(FormatDouble((100.0 * ei.mi.game_phase() / 128.0), 6, false));
                 TraceStream.Append("% MG, ");
@@ -596,7 +565,7 @@ namespace Portfish
             ei.mi = null;
             EvalInfoBroker.Free();
 
-            return e.value = pos.sideToMove == ColorC.WHITE ? v : -v;
+            return pos.sideToMove == ColorC.WHITE ? v : -v;
         }
 
         // init_eval_info() initializes king bitboards for given color adding
@@ -983,8 +952,8 @@ namespace Portfish
             bool Trace,
             Position pos,
             EvalInfo ei,
-            ref short marginsWHITE,
-            ref short marginsBLACK)
+            ref Value marginsWHITE,
+            ref Value marginsBLACK)
         {
             var Them = (Us == ColorC.WHITE ? ColorC.BLACK : ColorC.WHITE);
 
