@@ -1308,7 +1308,7 @@ namespace Portfish
             }
 
             // The destination square cannot be occupied by a friendly piece
-            if ((this.board[to] >> 3) == us)
+            if (piece_on(to) != PieceC.NO_PIECE && Utils.color_of(piece_on(to)) == us)
             {
                 return false;
             }
@@ -1340,7 +1340,7 @@ namespace Portfish
                     case SquareC.DELTA_SE:
                         // Capture. The destination square must be occupied by an enemy
                         // piece (en passant captures was handled earlier).
-                        if ((this.board[to] >> 3) != them)
+                        if (piece_on(to) == PieceC.NO_PIECE || Utils.color_of(piece_on(to)) != them)
                         {
                             return false;
                         }
@@ -1566,7 +1566,7 @@ namespace Portfish
             var capture = Utils.type_of_move(m) == MoveTypeC.ENPASSANT ? PieceTypeC.PAWN : (this.board[to] & 7);
 
             Debug.Assert(Utils.color_of(piece) == us);
-            Debug.Assert(Utils.color_of(this.piece_on(to)) != us);
+            Debug.Assert(piece_on(to) == PieceC.NO_PIECE || Utils.color_of(piece_on(to)) == them);
             Debug.Assert(capture != PieceTypeC.KING);
 
             if (capture != 0)

@@ -861,7 +861,8 @@ namespace Portfish
 
         internal static int color_of(int p)
         {
-            return p == PieceC.NO_PIECE ? ColorC.NO_COLOR : p >> 3;
+            Debug.Assert(p != PieceC.NO_PIECE);
+            return p >> 3;
         }
 
 #if AGGR_INLINE
