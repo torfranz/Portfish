@@ -1419,9 +1419,10 @@ finalize:
                 // Step 19. Check for split
                 if (!SpNode 
                     && depth >= Threads.min_split_depth() 
-                    && bestValue < beta
                     && Threads.available_slave_exists(thisThread))
                 {
+                    Debug.Assert(bestValue < beta);
+
                     bestValue = Threads.split(
                         Constants.FakeSplit,
                         pos,
