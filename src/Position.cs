@@ -1283,10 +1283,9 @@ namespace Portfish
         internal bool is_pseudo_legal(int m)
         {
             var us = this.sideToMove;
-            var them = this.sideToMove ^ 1;
-            var from = ((m >> 6) & 0x3F);
-            var to = (m & 0x3F);
-            var pc = this.board[((m >> 6) & 0x3F)];
+            Square from = Utils.from_sq(m);
+            Square to = Utils.to_sq(m);
+            Piece pc = piece_moved(m);
 
             // Use a slower but simpler function for uncommon cases
             if (Utils.type_of_move(m) != MoveTypeC.NORMAL)
@@ -1340,13 +1339,13 @@ namespace Portfish
                     case SquareC.DELTA_SE:
                         // Capture. The destination square must be occupied by an enemy
                         // piece (en passant captures was handled earlier).
-                        if (piece_on(to) == PieceC.NO_PIECE || Utils.color_of(piece_on(to)) != them)
+                        if (piece_on(to) == PieceC.NO_PIECE || Utils.color_of(piece_on(to)) == us)
                         {
                             return false;
                         }
 
                         // From and to files must be one file apart, avoids a7h5
-                        if (Math.Abs((from & 7) - (to & 7)) != 1)
+                        if (Math.Abs(Utils.file_of(from) - Utils.file_of(to)) != 1)
                         {
                             return false;
                         }
@@ -1395,20 +1394,18 @@ namespace Portfish
             // Evasions generator already takes care to avoid some kind of illegal moves
             // and pl_move_is_legal() relies on this. So we have to take care that the
             // same kind of moves are filtered out here.
-            if (this.st.checkersBB != 0)
+            if (in_check())
             {
-                if ((pc & 7) != PieceTypeC.KING)
+                if (Utils.type_of(pc) != PieceTypeC.KING)
                 {
-                    var b = this.st.checkersBB;
-                    var checksq = Utils.pop_lsb(ref b);
-
-                    if (b != 0) // double check ? In this case a king move is required
+                    // Double check? In this case a king move is required
+                    if (Utils.more_than_one(this.st.checkersBB))
                     {
                         return false;
                     }
 
                     // Our move must be a blocking evasion or a capture of the checking piece
-                    if (((Utils.BetweenBB[checksq][this.pieceList[us][PieceTypeC.KING][0]] | this.st.checkersBB)
+                    if (((Utils.BetweenBB[Utils.lsb(this.st.checkersBB)][this.pieceList[us][PieceTypeC.KING][0]] | this.st.checkersBB)
                          & Utils.SquareBB[to]) == 0)
                     {
                         return false;
