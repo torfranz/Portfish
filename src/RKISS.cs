@@ -20,11 +20,11 @@
         private ulong a, b, c, d, e;
 
         // Init seed and scramble a few rounds
-        internal RKISS()
+        internal RKISS(long seed = 73)
         {
             this.a = 0xf1ea5eed;
             this.b = this.c = this.d = 0xd4e12c77;
-            for (var i = 0; i < 73; i++)
+            for (var i = 0; i < seed; i++) // Scramble a few rounds
             {
                 this.rand();
             }
