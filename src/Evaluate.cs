@@ -2,6 +2,9 @@
 using Square = System.Int32;
 using Key = System.UInt64;
 using Value = System.Int32;
+using Score = System.Int32;
+using ScaleFactor = System.Int32;
+using Phase = System.Int32;
 
 namespace Portfish
 {
@@ -428,6 +431,9 @@ namespace Portfish
             if (e.key == key)
             {
                 margin = pos.sideToMove == ColorC.WHITE ? e.marginsWHITE : e.marginsBLACK;
+                ei.pi = null;
+                ei.mi = null;
+                EvalInfoBroker.Free();
                 return e.value;
             }
            
@@ -542,12 +548,9 @@ namespace Portfish
             margin = pos.sideToMove == ColorC.WHITE ? e.marginsWHITE : e.marginsBLACK;
 
             // interpolate
-            var ev = (((short)(score & 0xffff)) * sf) / ScaleFactorC.SCALE_FACTOR_NORMAL;
-            var result = ((((score + 32768) & ~0xffff) / 0x10000) * ei.mi.gamePhase + ev * (128 - ei.mi.gamePhase))
-                         / 128;
-            var v = ((result + GrainSize / 2) & ~(GrainSize - 1));
+            Value v = interpolate(score, ei.mi.game_phase(), sf);
 
-            // In case of tracing add all single evaluation contributions for both white and black
+                        // In case of tracing add all single evaluation contributions for both white and black
             if (Trace)
             {
                 trace_add(TracedTypeC.PST, pos.psq_score());
@@ -1564,23 +1567,23 @@ namespace Portfish
             return Utils.apply_weight(Utils.make_score(mg, eg), internalWeight);
         }
 
-        // interpolate() interpolates between a middle game and an endgame score,
-        // based on game phase. It also scales the return value by a ScaleFactor array.
+         // interpolate() interpolates between a middle game and an endgame score,
+         // based on game phase.It also scales the return value by a ScaleFactor array.
 
-        // ALL CALLS INLINED
-        //#if AGGR_INLINE
-        //        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        //#endif
-        //        static Value interpolate(Score v, Phase ph, ScaleFactor sf)
-        //        {
-        //            Debug.Assert(Utils.mg_value(v) > -ValueC.VALUE_INFINITE && Utils.mg_value(v) < ValueC.VALUE_INFINITE);
-        //            Debug.Assert(Utils.eg_value(v) > -ValueC.VALUE_INFINITE && Utils.eg_value(v) < ValueC.VALUE_INFINITE);
-        //            Debug.Assert(ph >= PhaseC.PHASE_ENDGAME && ph <= PhaseC.PHASE_MIDGAME);
+         // ALL CALLS INLINED
+#if AGGR_INLINE
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#endif
+        static Value interpolate(Score v, Phase ph, ScaleFactor sf)
+        {
+            Debug.Assert(Utils.mg_value(v) > -ValueC.VALUE_INFINITE && Utils.mg_value(v) < ValueC.VALUE_INFINITE);
+            Debug.Assert(Utils.eg_value(v) > -ValueC.VALUE_INFINITE && Utils.eg_value(v) < ValueC.VALUE_INFINITE);
+            Debug.Assert(ph >= PhaseC.PHASE_ENDGAME && ph <= PhaseC.PHASE_MIDGAME);
 
-        //            int ev = (Utils.eg_value(v) * (int)(sf)) / ScaleFactorC.SCALE_FACTOR_NORMAL;
-        //            int result = (Utils.mg_value(v) * (int)(ph) + ev * (int)(128 - ph)) / 128;
-        //            return ((result + GrainSize / 2) & ~(GrainSize - 1));
-        //        }
+            int ev = (Utils.eg_value(v) * (int)(sf)) / ScaleFactorC.SCALE_FACTOR_NORMAL;
+            int result = (Utils.mg_value(v) * (int)(ph) + ev * (int)(128 - ph)) / 128;
+            return ((result + GrainSize / 2) & ~(GrainSize - 1));
+        }
 
         // A couple of little helpers used by tracing code, to_cp() converts a value to
         // a double in centipawns scale, trace_add() stores white and black scores.
