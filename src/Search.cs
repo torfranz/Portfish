@@ -912,19 +912,7 @@ finalize:
                         eval = ttValue;
                     }
                 }
-
-                if (!tteHasValue)
-                {
-                    TT.store(
-                        posKey,
-                        ValueC.VALUE_NONE,
-                        Bound.BOUND_NONE,
-                        DepthC.DEPTH_NONE,
-                        MoveC.MOVE_NONE,
-                        ss[ssPos].staticEval,
-                        ss[ssPos].evalMargin);
-                }
-            }
+           }
 
             // Update gain for the parent non-capture move given the static position
             // evaluation before and after the move.
