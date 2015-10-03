@@ -1536,7 +1536,7 @@ finalize:
             int ttMove, move, bestMove;
             int ttValue, bestValue, value, futilityValue, futilityBase, oldAlpha = 0;
 
-            bool givesCheck, enoughMaterial, evasionPrunable;
+            bool givesCheck, enoughMaterial, evasionPrunable, fromNull;
             var tteHasValue = false;
             TTEntry tte;
             uint ttePos = 0;
@@ -1551,7 +1551,8 @@ finalize:
 
             ss[ssPos].currentMove = bestMove = MoveC.MOVE_NONE;
             ss[ssPos].ply = ss[ssPos - 1].ply + 1;
-            
+            fromNull = ss[ssPos - 1].currentMove == MoveC.MOVE_NULL;
+
             // Check for an instant draw or maximum ply reached
             if (pos.is_draw(false, false) || ss[ssPos].ply > Constants.MAX_PLY)
             {
@@ -1591,7 +1592,17 @@ finalize:
             else
             {
                 ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
-                
+                if (fromNull)
+                {
+                    // Approximated score. Real one is slightly higher due to tempo
+                    ss[ssPos].staticEval = bestValue = -ss[ssPos - 1].staticEval;
+                    ss[ssPos].evalMargin = ValueC.VALUE_ZERO;
+                }
+                else
+                {
+                    ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
+                }
+
                 // Stand pat. Return immediately if static value is at least beta
                 if (bestValue >= beta)
                 {
@@ -1636,7 +1647,8 @@ finalize:
 
                 // Futility pruning
                 if (!PvNode 
-                    && !InCheck 
+                    && !InCheck
+                    && !fromNull
                     && !givesCheck
                     && move != ttMove 
                     && enoughMaterial
