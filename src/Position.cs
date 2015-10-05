@@ -1283,7 +1283,6 @@ namespace Portfish
         internal bool is_pseudo_legal(int m)
         {
             var us = this.sideToMove;
-            var them = this.sideToMove ^ 1;
             var from = ((m >> 6) & 0x3F);
             var to = (m & 0x3F);
             var pc = this.board[((m >> 6) & 0x3F)];
@@ -1340,7 +1339,7 @@ namespace Portfish
                     case SquareC.DELTA_SE:
                         // Capture. The destination square must be occupied by an enemy
                         // piece (en passant captures was handled earlier).
-                        if (piece_on(to) == PieceC.NO_PIECE || Utils.color_of(piece_on(to)) != them)
+                        if (piece_on(to) == PieceC.NO_PIECE || Utils.color_of(piece_on(to)) == us)
                         {
                             return false;
                         }
@@ -1406,7 +1405,7 @@ namespace Portfish
                     {
                         return false;
                     }
-
+                    
                     // Our move must be a blocking evasion or a capture of the checking piece
                     if (((Utils.BetweenBB[checksq][this.pieceList[us][PieceTypeC.KING][0]] | this.st.checkersBB)
                          & Utils.SquareBB[to]) == 0)
