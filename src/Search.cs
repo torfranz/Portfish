@@ -909,15 +909,9 @@ finalize:
             }
             else if (tteHasValue)
             {
-                // Following asserts are valid only in single thread condition because
-                // TT access is always racy and its contents cannot be trusted.
-                Debug.Assert(tte.static_value() != ValueC.VALUE_NONE || Threads.size() > 1);
-                Debug.Assert(ttValue != ValueC.VALUE_NONE || tte.type() == Bound.BOUND_NONE || Threads.size() > 1);
-                
-                ss[ssPos].staticEval = tte.static_value();
-                ss[ssPos].evalMargin = tte.static_value_margin();
-
-                if (eval == ValueC.VALUE_NONE || ss[ssPos].evalMargin == ValueC.VALUE_NONE) // Due to a race
+                // Never assume anything on values stored in TT
+                if ((ss[ssPos].staticEval = eval = tte.static_value()) == ValueC.VALUE_NONE
+                    || (ss[ssPos].evalMargin = tte.static_value_margin()) == ValueC.VALUE_NONE)
                 {
                     eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                 }
@@ -1643,16 +1637,15 @@ finalize:
             {
                 if (fromNull)
                 {
+                    // Approximated score. Real one is slightly higher due to tempo
                     ss[ssPos].staticEval = bestValue = -ss[ssPos - 1].staticEval;
                     ss[ssPos].evalMargin = ValueC.VALUE_ZERO;
                 }
                 else if (tteHasValue)
                 {
-                    Debug.Assert(tte.static_value() != ValueC.VALUE_NONE || Threads.size() > 1);
-                    ss[ssPos].staticEval = bestValue = tte.static_value();
-                    ss[ssPos].evalMargin = tte.static_value_margin();
-
-                    if (ss[ssPos].staticEval == ValueC.VALUE_NONE || ss[ssPos].evalMargin == ValueC.VALUE_NONE) // Due to a race
+                    // Never assume anything on values stored in TT
+                    if ((ss[ssPos].staticEval = bestValue = tte.static_value()) == ValueC.VALUE_NONE
+                        || (ss[ssPos].evalMargin = tte.static_value_margin()) == ValueC.VALUE_NONE)
                     {
                         ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                     }
