@@ -450,7 +450,7 @@ namespace Portfish
 
         private const long SIZE_OF_BOOKENTRY = 16;
 
-        private static readonly RKISS RKiss = new RKISS();
+        private static readonly RKISS RKiss = new RKISS(DateTime.Now.Millisecond % 10000L);
 
 #if PORTABLE
         private static bool bookNotExists = false;
@@ -458,10 +458,6 @@ namespace Portfish
 
         internal static void init()
         {
-            for (var i = Math.Abs(DateTime.Now.Millisecond % 10000L); i > 0; i--)
-            {
-                RKiss.rand(); // Make random number generation less deterministic
-            }
         }
 
         /// PolyglotBook::probe() tries to find a book move for the given position. If no move
