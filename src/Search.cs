@@ -81,7 +81,7 @@ namespace Portfish
 
         internal bool use_time_management()
         {
-            return (this.movetime + this.depth + this.nodes + this.infinite) == 0;
+            return (this.mate + this.movetime + this.depth + this.nodes + this.infinite) == 0;
         }
     };
 
@@ -474,7 +474,7 @@ namespace Portfish
                 goto finalize;
             }
 
-            if ((bool.Parse(OptionMap.Instance["OwnBook"].v)) && (Limits.infinite == 0))
+            if ((bool.Parse(OptionMap.Instance["OwnBook"].v)) && (Limits.infinite == 0) && (Limits.mate == 0))
             {
                 var bookMove = PolyglotBook.probe(
                     RootPos,
@@ -698,6 +698,14 @@ finalize:
                     if (depth > 2 && (BestMoveChanges != 0))
                     {
                         bestMoveNeverChanged = false;
+                    }
+
+                    // Do we have found a "mate in x"?
+                    if (Limits.mate != 0
+                            && bestValue >= ValueC.VALUE_MATE_IN_MAX_PLY
+                            && ValueC.VALUE_MATE - bestValue <= 2 * Limits.mate)
+                    {
+                        SignalsStop = true;
                     }
 
                     // Do we have time for the next iteration? Can we stop searching now?
@@ -935,6 +943,13 @@ finalize:
                     MoveC.MOVE_NONE,
                     ss[ssPos].staticEval,
                     ss[ssPos].evalMargin);
+            }
+
+            // Handling of UCI command 'mate in x moves'. We simply return if after
+            // 'x' moves we still have not checkmated the opponent.
+            if (PvNode && !RootNode && !inCheck && (Limits.mate != 0) && ss[ssPos].ply > 2 * Limits.mate)
+            {
+                return eval;
             }
 
             // Update gain for the parent non-capture move given the static position
