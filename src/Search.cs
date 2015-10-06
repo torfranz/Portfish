@@ -939,13 +939,6 @@ finalize:
                     ss[ssPos].evalMargin);
             }
 
-            // Handling of UCI command 'mate in x moves'. We simply return if after
-            // 'x' moves we still have not checkmated the opponent.
-            if (PvNode && !RootNode && !inCheck && (Limits.mate != 0) && ss[ssPos].ply > 2 * Limits.mate)
-            {
-                return eval;
-            }
-
             // Update gain for the parent non-capture move given the static position
             // evaluation before and after the move.
             if ((move = ss[ssPos - 1].currentMove) != MoveC.MOVE_NULL && ss[ssPos - 1].staticEval != ValueC.VALUE_NONE
