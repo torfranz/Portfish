@@ -156,7 +156,7 @@ namespace Portfish
             TTEntry tte;
             bool tteHasValue;
             
-            int m = 0;
+            int v, m = 0;
             var ply = 0;
             uint ttePos = 0;
             
@@ -166,7 +166,16 @@ namespace Portfish
 
                 if ((!tteHasValue) || tte.move() != this.pv[ply]) // Don't overwrite existing correct entries
                 {
-                    TT.store(pos.key(), ValueC.VALUE_NONE, Bound.BOUND_NONE, DepthC.DEPTH_NONE, this.pv[ply], ValueC.VALUE_NONE, ValueC.VALUE_NONE);
+                    if (pos.in_check())
+                    {
+                        v = m = ValueC.VALUE_NONE;
+                    }
+                    else
+                    {
+                        v = Evaluate.do_evaluate(false, pos, ref m);
+                    }
+
+                    TT.store(pos.key(), ValueC.VALUE_NONE, Bound.BOUND_NONE, DepthC.DEPTH_NONE, this.pv[ply], v, m);
                 }
 
                 Debug.Assert(pos.move_is_legal(pv[ply]));
@@ -802,7 +811,7 @@ finalize:
 
             // Step 1. Initialize node
             var thisThread = pos.this_thread();
-            var threatExtension = false;
+            //var threatExtension = false;
             inCheck = pos.in_check();
             
             if (SpNode)
@@ -898,25 +907,17 @@ finalize:
             {
                 ss[ssPos].staticEval = ss[ssPos].evalMargin = eval = ValueC.VALUE_NONE;
             }
-            else if(tteHasValue)
+            else if (tteHasValue)
             {
-                eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
-
-                // Following asserts are valid only in single thread condition because
-                // TT access is always racy and its contents cannot be trusted.
-                Debug.Assert(tte.static_value() != ValueC.VALUE_NONE || Threads.size() > 1);
-                Debug.Assert(ttValue != ValueC.VALUE_NONE || tte.type() == Bound.BOUND_NONE || Threads.size() > 1);
-
-                ss[ssPos].staticEval = eval = tte.static_value();
-                ss[ssPos]. evalMargin = tte.static_value_margin();
-
-                if (eval == ValueC.VALUE_NONE || ss[ssPos].evalMargin == ValueC.VALUE_NONE) // Due to a race
+                // Never assume anything on values stored in TT
+                if ((ss[ssPos].staticEval = eval = tte.static_value()) == ValueC.VALUE_NONE
+                    || (ss[ssPos].evalMargin = tte.static_value_margin()) == ValueC.VALUE_NONE)
                 {
                     eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                 }
 
                 // Can ttValue be used as a better position evaluation?
-                if (tteHasValue && ttValue != ValueC.VALUE_NONE)
+                if (ttValue != ValueC.VALUE_NONE)
                 {
                     if ((((tte.type() & Bound.BOUND_LOWER) != 0) && ttValue > eval)
                         || (((tte.type() & Bound.BOUND_UPPER) != 0) && ttValue < eval))
@@ -928,13 +929,19 @@ finalize:
             else
             {
                 eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
-                TT.store(posKey, ValueC.VALUE_NONE, Bound.BOUND_NONE, DepthC.DEPTH_NONE, MoveC.MOVE_NONE,
-                         ss[ssPos].staticEval, ss[ssPos].evalMargin);
+                TT.store(
+                    posKey,
+                    ValueC.VALUE_NONE,
+                    Bound.BOUND_NONE,
+                    DepthC.DEPTH_NONE,
+                    MoveC.MOVE_NONE,
+                    ss[ssPos].staticEval,
+                    ss[ssPos].evalMargin);
             }
 
             // Handling of UCI command 'mate in x moves'. We simply return if after
             // 'x' moves we still have not checkmated the opponent.
-            if (PvNode && !RootNode && !inCheck && (Limits.mate !=0) && ss[ssPos].ply > 2 * Limits.mate)
+            if (PvNode && !RootNode && !inCheck && (Limits.mate != 0) && ss[ssPos].ply > 2 * Limits.mate)
             {
                 return eval;
             }
@@ -1043,16 +1050,23 @@ finalize:
                     // The null move failed low, which means that we may be faced with
                     // some kind of threat. If the previous move was reduced, check if
                     // the move that refuted the null move was somehow connected to the
+                    // the move that refuted the null move was somehow connected to the
                     // move which was reduced. If a connection is found extend moves that
                     // defend against threat.
                     threatMove = ss[ssPos + 1].currentMove;
 
-                    if (depth < 5 * DepthC.ONE_PLY 
-                        && (ss[ssPos - 1].reduction != 0) 
-                        && threatMove != MoveC.MOVE_NONE
+                    if (depth < 5 * DepthC.ONE_PLY && (ss[ssPos - 1].reduction != 0) && threatMove != MoveC.MOVE_NONE
                         && allows_move(pos, ss[ssPos - 1].currentMove, threatMove))
                     {
-                        threatExtension = true;
+                        //threatExtension = true;
+                        
+                        if (st != null)
+                        {
+                            st.previous = null;
+                            StateInfoBroker.Free();
+                        }
+                        MovesSearchedBroker.Free();
+                        return beta - 1;
                     }
                 }
             }
@@ -1223,10 +1237,10 @@ finalize:
                 {
                     ext = DepthC.ONE_PLY;
                 }
-                else if (threatExtension && prevents_move(pos, move, threatMove))
-                {
-                    ext = DepthC.ONE_PLY;
-                }
+                // else if (threatExtension && prevents_move(pos, move, threatMove))
+                // {
+                // ext = DepthC.ONE_PLY;
+                // }
                 else if (givesCheck && pos.see(move, true) >= 0)
                 {
                     ext = DepthC.ONE_PLY / 2;
@@ -1512,7 +1526,8 @@ finalize:
                     Bound.BOUND_LOWER,
                     depth,
                     bestMove,
-                    ss[ssPos].staticEval, ss[ssPos].evalMargin);
+                    ss[ssPos].staticEval,
+                    ss[ssPos].evalMargin);
 
                 if (!pos.is_capture_or_promotion(bestMove) && !inCheck)
                 {
@@ -1536,11 +1551,7 @@ finalize:
             }
             else // Failed low or PV search
             {
-                TT.store(posKey, 
-                    value_to_tt(bestValue, ss[ssPos].ply), 
-                    PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, depth, bestMove, 
-                    ss[ssPos].staticEval, 
-                    ss[ssPos].evalMargin);
+                TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply), PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, depth, bestMove, ss[ssPos].staticEval, ss[ssPos].evalMargin);
             }
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
@@ -1629,7 +1640,6 @@ finalize:
             }
             else
             {
-                ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                 if (fromNull)
                 {
                     // Approximated score. Real one is slightly higher due to tempo
@@ -1638,12 +1648,9 @@ finalize:
                 }
                 else if (tteHasValue)
                 {
-                    Debug.Assert(tte.static_value() != ValueC.VALUE_NONE || Threads.size() > 1);
-
-                    ss[ssPos].staticEval = bestValue = tte.static_value();
-                    ss[ssPos].evalMargin = tte.static_value_margin();
-
-                    if (ss[ssPos].staticEval == ValueC.VALUE_NONE || ss[ssPos].evalMargin == ValueC.VALUE_NONE) // Due to a race
+                    // Never assume anything on values stored in TT
+                    if ((ss[ssPos].staticEval = bestValue = tte.static_value()) == ValueC.VALUE_NONE
+                        || (ss[ssPos].evalMargin = tte.static_value_margin()) == ValueC.VALUE_NONE)
                     {
                         ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                     }
@@ -1699,9 +1706,9 @@ finalize:
 
                 // Futility pruning
                 if (!PvNode 
-                    && !InCheck
-                    && !fromNull
+                    && !InCheck 
                     && !givesCheck
+                    && !fromNull
                     && move != ttMove 
                     && enoughMaterial
                     && Utils.type_of_move(move) != MoveTypeC.PROMOTION && !pos.is_passed_pawn_push(move))
@@ -1789,7 +1796,8 @@ finalize:
                         }
                         else // Fail high
                         {
-                            TT.store(posKey, value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, ttDepth, move, ss[ssPos].staticEval, ss[ssPos].evalMargin);
+                            TT.store(posKey, value_to_tt(value, ss[ssPos].ply), Bound.BOUND_LOWER, 
+                                ttDepth, move, ss[ssPos].staticEval, ss[ssPos].evalMargin);
 
                             if (st != null)
                             {
@@ -1819,7 +1827,8 @@ finalize:
             }
 
             TT.store(posKey, value_to_tt(bestValue, ss[ssPos].ply),
-                    PvNode && bestMove > oldAlpha ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
+                    //PvNode && bestMove != MoveC.MOVE_NONE ? Bound.BOUND_EXACT : Bound.BOUND_UPPER,
+                    PvNode && bestMove > oldAlpha ? Bound.BOUND_EXACT : Bound.BOUND_UPPER, // TODO: this line asserts in bench
                     ttDepth, bestMove, ss[ssPos].staticEval, ss[ssPos].evalMargin);
 
             Debug.Assert(bestValue > -ValueC.VALUE_INFINITE && bestValue < ValueC.VALUE_INFINITE);
@@ -1926,13 +1935,13 @@ finalize:
 
             // Second's destination is defended by the first move's piece
             Bitboard m1att = Position.attacks_from(pos.piece_on(m1to), m1to, pos.pieces() ^ (ulong)m2from);
-            if (Utils.bit_is_set(m1att , m2to) != 0)
+            if (Utils.bit_is_set(m1att, m2to) != 0)
             {
                 return true;
             }
 
             // Second move gives a discovered check through the first's checking piece
-            if (Utils.bit_is_set(m1att , pos.king_square(pos.sideToMove)) != 0 &&
+            if (Utils.bit_is_set(m1att, pos.king_square(pos.sideToMove)) != 0 &&
                 Utils.bit_is_set(Utils.between_bb(m1to, pos.king_square(pos.sideToMove)), m2from) != 0) // TODO: removing condition asserts below
             {
                 Debug.Assert(Utils.bit_is_set(Utils.between_bb(m1to, pos.king_square(pos.sideToMove)), m2from) != 0);

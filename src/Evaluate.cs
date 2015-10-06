@@ -9,7 +9,6 @@ using Phase = System.Int32;
 namespace Portfish
 {
     using System;
-    using System.Collections.Generic;
     using System.Diagnostics;
     using System.Runtime.CompilerServices;
     using System.Text;
@@ -406,6 +405,7 @@ namespace Portfish
             Debug.Assert(!pos.in_check());
 
             var ei = EvalInfoBroker.GetObject();
+
             Value marginsWHITE, marginsBLACK;
             int score = 0, mobilityWhite = 0, mobilityBlack = 0;
 
@@ -427,11 +427,11 @@ namespace Portfish
             if (ei.mi.evaluationFunction != null)
             {
                 margin = ValueC.VALUE_ZERO;
-                var value = ei.mi.evaluationFunction(ei.mi.evaluationFunctionColor, pos);
+                var retval = ei.mi.evaluationFunction(ei.mi.evaluationFunctionColor, pos);
                 ei.pi = null;
                 ei.mi = null;
                 EvalInfoBroker.Free();
-                return value;
+                return retval;
             }
 
             // Probe the pawn hash table
@@ -517,9 +517,12 @@ namespace Portfish
             margin = pos.sideToMove == ColorC.WHITE ? marginsWHITE : marginsBLACK;
 
             // interpolate
-            Value v = interpolate(score, ei.mi.game_phase(), sf);
+            //Value v = interpolate(score, ei.mi.game_phase(), sf);
+            var ev = (((short)(score & 0xffff)) * sf) / ScaleFactorC.SCALE_FACTOR_NORMAL;
+            var result = ((((score + 32768) & ~0xffff) / 0x10000) * ei.mi.gamePhase + ev * (128 - ei.mi.gamePhase)) / 128;
+            var v = ((result + GrainSize / 2) & ~(GrainSize - 1));
 
-                        // In case of tracing add all single evaluation contributions for both white and black
+            // In case of tracing add all single evaluation contributions for both white and black
             if (Trace)
             {
                 trace_add(TracedTypeC.PST, pos.psq_score());
@@ -768,7 +771,7 @@ namespace Portfish
                         if (((b & (b - 1)) == 0) && ((b & pos.byColorBB[Them]) != 0))
                         {
 #if X64
-                            score += ThreatBonus[Piece][pos.board[Utils.BSFTable[((b & (0xffffffffffffffff - b + 1)) * Utils.DeBruijn_64) >> 58]] & 7];
+                            score += ThreatBonus[Piece][pos.board[Utils.BSFTable[((b & (0xffffffffffffffff - b + 1)) * DeBruijn_64) >> 58]] & 7];
 #else
                             score += ThreatBonus[Piece][pos.board[Utils.lsb(b)] & 7];
 #endif
@@ -1160,14 +1163,13 @@ namespace Portfish
                 // result in a score change far bigger than the value of the captured piece.
                 kingScore = KingDangerTable[Us == Search.RootColor ? 1 : 0][attackUnits];
                 score -= kingScore;
-                
                 if (Us == ColorC.WHITE)
                 {
-                    marginsWHITE += (short)kingScore;
+                    marginsWHITE += (((kingScore + 32768) & ~0xffff) / 0x10000);
                 }
                 else
                 {
-                    marginsBLACK += (short)kingScore;
+                    marginsBLACK += (((kingScore + 32768) & ~0xffff) / 0x10000);
                 }
             }
 
@@ -1199,7 +1201,7 @@ namespace Portfish
 #if X64
                 Bitboard bb = b;
                 b &= (b - 1);
-                Square s = (Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * Utils.DeBruijn_64) >> 58]);
+                Square s = (Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * DeBruijn_64) >> 58]);
 #else
                 var s = Utils.pop_lsb(ref b);
 #endif
@@ -1536,10 +1538,10 @@ namespace Portfish
             return Utils.apply_weight(Utils.make_score(mg, eg), internalWeight);
         }
 
-         // interpolate() interpolates between a middle game and an endgame score,
-         // based on game phase.It also scales the return value by a ScaleFactor array.
+        // interpolate() interpolates between a middle game and an endgame score,
+        // based on game phase. It also scales the return value by a ScaleFactor array.
 
-         // ALL CALLS INLINED
+        // ALL CALLS INLINED
 #if AGGR_INLINE
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #endif

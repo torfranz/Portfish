@@ -557,7 +557,7 @@ namespace Portfish
 #if X64
                 Bitboard bb = pinners;
                 pinners &= (pinners - 1);
-                b = (Utils.BetweenBB[ksq][(Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * Utils.DeBruijn_64) >> 58])]) & occupied_squares;
+                b = (Utils.BetweenBB[ksq][(Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * DeBruijn_64) >> 58])]) & occupied_squares;
 #else
                 b = (Utils.BetweenBB[ksq][Utils.pop_lsb(ref pinners)]) & this.occupied_squares;
 #endif
@@ -588,7 +588,7 @@ namespace Portfish
 #if X64
                 Bitboard bb = pinners;
                 pinners &= (pinners - 1);
-                b = (Utils.BetweenBB[ksq][(Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * Utils.DeBruijn_64) >> 58])]) & occupied_squares;
+                b = (Utils.BetweenBB[ksq][(Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * DeBruijn_64) >> 58])]) & occupied_squares;
 #else
                 b = (Utils.BetweenBB[ksq][Utils.pop_lsb(ref pinners)]) & this.occupied_squares;
 #endif
@@ -1394,18 +1394,20 @@ namespace Portfish
             // Evasions generator already takes care to avoid some kind of illegal moves
             // and pl_move_is_legal() relies on this. So we have to take care that the
             // same kind of moves are filtered out here.
-            if (in_check())
+            if (this.st.checkersBB != 0)
             {
                 if (Utils.type_of(pc) != PieceTypeC.KING)
                 {
-                    // Double check? In this case a king move is required
-                    if (Utils.more_than_one(this.st.checkersBB))
+                    var b = this.st.checkersBB;
+                    var checksq = Utils.pop_lsb(ref b);
+
+                    if (b != 0) // double check ? In this case a king move is required
                     {
                         return false;
                     }
-
+                    
                     // Our move must be a blocking evasion or a capture of the checking piece
-                    if (((Utils.BetweenBB[Utils.lsb(this.st.checkersBB)][this.pieceList[us][PieceTypeC.KING][0]] | this.st.checkersBB)
+                    if (((Utils.BetweenBB[checksq][this.pieceList[us][PieceTypeC.KING][0]] | this.st.checkersBB)
                          & Utils.SquareBB[to]) == 0)
                     {
                         return false;
