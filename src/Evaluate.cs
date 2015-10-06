@@ -67,7 +67,7 @@ namespace Portfish
 
         // Evaluation weights, initialized from UCI options
         //enum { Mobility, PassedPawns, Space, KingDangerUs, KingDangerThem };
-        internal static readonly int[] Weights = new int[6];
+        internal static readonly int[] Weights = new int[3];
 
         // Internal evaluation weights. These are applied on top of the evaluation
         // weights read from UCI parameters. The purpose is to be able to change
@@ -78,8 +78,7 @@ namespace Portfish
         internal static readonly int[] WeightsInternal =
             {
                 Utils.make_score(252, 344), Utils.make_score(216, 266),
-                Utils.make_score(46, 0), Utils.make_score(247, 0),
-                Utils.make_score(259, 0)
+                Utils.make_score(46, 0)
             };
 
         // MobilityBonus[PieceType][attacked] contains mobility bonuses for middle and
@@ -263,6 +262,11 @@ namespace Portfish
         // the strength of the enemy attack are added up into an integer, which
         // is used as an index to KingDangerTable[].
         //
+
+        // King safety evaluation is asymmetrical and different for us (root color)
+        // and for our opponent. These values are used to init KingDangerTable.
+        internal static readonly int[] KingDangerWeights = { 259, 247 };
+
         // KingAttackWeights[PieceType] contains king attack weights by piece type
         internal static readonly int[] KingAttackWeights = { 0, 0, 2, 2, 3, 5 };
 
@@ -311,11 +315,6 @@ namespace Portfish
             KingDangerTable[0] = new int[128];
             KingDangerTable[1] = new int[128];
 
-            // King safety is asymmetrical. Our king danger level is weighted by
-            // "Cowardice" UCI parameter, instead the opponent one by "Aggressiveness".
-            // If running in analysis mode, make sure we use symmetrical king safety. We
-            // do this by replacing both Weights[kingDangerUs] and Weights[kingDangerThem]
-            // by their average.
             Weights[EvalWeightC.Mobility] = weight_option(
                 "Mobility (Middle Game)",
                 "Mobility (Endgame)",
@@ -325,30 +324,22 @@ namespace Portfish
                 "Passed Pawns (Endgame)",
                 WeightsInternal[EvalWeightC.PassedPawns]);
             Weights[EvalWeightC.Space] = weight_option("Space", "Space", WeightsInternal[EvalWeightC.Space]);
-            Weights[EvalWeightC.KingDangerUs] = weight_option(
-                "Cowardice",
-                "Cowardice",
-                WeightsInternal[EvalWeightC.KingDangerUs]);
-            Weights[EvalWeightC.KingDangerThem] = weight_option(
-                "Aggressiveness",
-                "Aggressiveness",
-                WeightsInternal[EvalWeightC.KingDangerThem]);
+
+            int[] KingDanger = { KingDangerWeights[0], KingDangerWeights[1] };
 
             // If running in analysis mode, make sure we use symmetrical king safety. We do this
             // by replacing both Weights[kingDangerUs] and Weights[kingDangerThem] by their average.
             if (bool.Parse(OptionMap.Instance["UCI_AnalyseMode"].v))
             {
-                Weights[EvalWeightC.KingDangerUs] =
-                    Weights[EvalWeightC.KingDangerThem] =
-                    (Weights[EvalWeightC.KingDangerUs] + Weights[EvalWeightC.KingDangerThem]) / 2;
+                KingDanger[0] = KingDanger[1] = (KingDanger[0] + KingDanger[1]) / 2;
             }
 
             for (int t = 0, i = 1; i < 100; i++)
             {
                 t = Math.Min(Peak, Math.Min((int)(0.4 * i * i), t + MaxSlope));
 
-                KingDangerTable[1][i] = Utils.apply_weight(Utils.make_score(t, 0), Weights[EvalWeightC.KingDangerUs]);
-                KingDangerTable[0][i] = Utils.apply_weight(Utils.make_score(t, 0), Weights[EvalWeightC.KingDangerThem]);
+                KingDangerTable[0][i] = Utils.apply_weight(Utils.make_score(t, 0), Utils.make_score(KingDanger[0], 0));
+                KingDangerTable[1][i] = Utils.apply_weight(Utils.make_score(t, 0), Utils.make_score(KingDanger[1], 0));
             }
         }
 

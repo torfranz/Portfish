@@ -123,8 +123,6 @@
             this.Add("Passed Pawns (Middle Game)", new UCIOption(idx++, 100, 0, 200, UCIOptionChanges.on_eval));
             this.Add("Passed Pawns (Endgame)", new UCIOption(idx++, 100, 0, 200, UCIOptionChanges.on_eval));
             this.Add("Space", new UCIOption(idx++, 100, 0, 200, UCIOptionChanges.on_eval));
-            this.Add("Aggressiveness", new UCIOption(idx++, 100, 0, 200, UCIOptionChanges.on_eval));
-            this.Add("Cowardice", new UCIOption(idx++, 100, 0, 200, UCIOptionChanges.on_eval));
             this.Add("Min Split Depth", new UCIOption(idx++, msd, 4, 7, UCIOptionChanges.on_threads));
             this.Add("Max Threads per Split Point", new UCIOption(idx++, 5, 4, 8, UCIOptionChanges.on_threads));
             this.Add("Threads", new UCIOption(idx++, cpus, 1, Constants.MAX_THREADS, UCIOptionChanges.on_threads));
