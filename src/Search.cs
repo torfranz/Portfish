@@ -1266,7 +1266,7 @@ namespace Portfish
                     ss[ssPos].excludedMove = MoveC.MOVE_NONE;
                     if (value < rBeta)
                     {
-                        ext = rBeta >= beta ? DepthC.ONE_PLY + DepthC.ONE_PLY / 2 : DepthC.ONE_PLY;
+                        ext = DepthC.ONE_PLY;
                     }
                 }
 
