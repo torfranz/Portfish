@@ -579,11 +579,12 @@ namespace Portfish
                     threads[idx].exit();
                     threads.RemoveAt(idx);
                 }
-            }
+        }
 
-            // init() is called during startup. Initializes locks and condition variables
-            // and launches all threads sending them immediately to sleep.
-            internal static void init()
+        // init() is called at startup to create and launch requested threads, that will
+        // go immediately to sleep due to 'sleepWhileIdle' set to true. We cannot use
+        // engine at this point due to allocation of Endgames in Thread c'tor.
+        internal static void init()
             {
                 var requested = int.Parse(OptionMap.Instance["Threads"].v);
                 var initEvents = new ManualResetEvent[requested + 1];
@@ -609,8 +610,8 @@ namespace Portfish
                 read_uci_options(initEvents);
             }
 
-            // exit() is called to cleanly terminate the threads when the program finishes
-            internal static void exit()
+        // exit() cleanly terminates the threads before the program exits
+        internal static void exit()
             {
                 for (var i = 0; i < size(); i++)
                 {
@@ -633,16 +634,16 @@ namespace Portfish
                 }
 
                 return false;
-            }
+        }
 
             // split() does the actual work of distributing the work at a node between
             // several available threads. If it does not succeed in splitting the node
-            // (because no idle threads are available, or because we have no unused split
-            // point objects), the function immediately returns. If splitting is possible, a
-            // SplitPoint object is initialized with all the data that must be copied to the
-            // helper threads and then helper threads are told that they have been assigned
-            // work. This will cause them to instantly leave their idle loops and call
-            // search(). When all threads have returned from search() then split() returns.
+            // (because no idle threads are available), the function immediately returns.
+            // If splitting is possible, a SplitPoint object is initialized with all the
+            // data that must be copied to the helper threads and then helper threads are
+            // told that they have been assigned work. This will cause them to instantly
+            // leave their idle loops and call search(). When all threads have returned from
+            // search() then split() returns.
             internal static int split(
                 bool Fake,
                 Position pos,
@@ -658,22 +659,18 @@ namespace Portfish
                 MovePicker mp,
                 int nodeType)
             {
-                Debug.Assert(pos.pos_is_ok());
+            Debug.Assert(bestValue <= alpha && alpha < beta && beta <= ValueC.VALUE_INFINITE);
+            Debug.Assert(pos.pos_is_ok());
                 Debug.Assert(bestValue > -ValueC.VALUE_INFINITE);
-                Debug.Assert(bestValue <= alpha);
-                Debug.Assert(alpha < beta);
-                Debug.Assert(beta <= ValueC.VALUE_INFINITE);
                 Debug.Assert(depth > DepthC.DEPTH_ZERO);
 
                 var master = pos.this_thread();
 
-                if (master.splitPointsSize >= Constants.MAX_SPLITPOINTS_PER_THREAD)
-                {
-                    return bestValue;
-                }
+            Debug.Assert(master.searching);
+            Debug.Assert(master.splitPointsSize < Constants.MAX_SPLITPOINTS_PER_THREAD);
 
-                // Pick the next available split point from the split point stack
-                var sp = master.splitPoints[master.splitPointsSize];
+            // Pick the next available split point from the split point stack
+            var sp = master.splitPoints[master.splitPointsSize];
 
                 sp.parent = master.activeSplitPoint;
                 sp.master = master;
@@ -697,32 +694,28 @@ namespace Portfish
                 sp.ss = ss;
                 sp.ssPos = ssPos;
 
-                Debug.Assert(master.searching);
-                master.activeSplitPoint = sp;
-
-                var slavesCnt = 0;
-
-                ThreadHelper.lock_grab(splitLock);
+            // Try to allocate available threads and ask them to start searching setting
+            // 'searching' flag. This must be done under lock protection to avoid concurrent
+            // allocation of the same slave by another master.
+            ThreadHelper.lock_grab(splitLock);
                 ThreadHelper.lock_grab(sp.Lock);
 
-                for (var i = 0; i < size() && !Fake; ++i)
+            master.splitPointsSize++;
+            master.activeSplitPoint = sp;
+            
+            var slavesCnt = 1; // Master is always included
+
+            for (var i = 0; i < size() && !Fake; ++i)
                 {
-                    if (threads[i].is_available_to(master))
+                    if (threads[i].is_available_to(master) && ++slavesCnt <= maxThreadsPerSplitPoint)
                     {
                         sp.slavesMask |= 1UL << i;
                         threads[i].activeSplitPoint = sp;
                         threads[i].searching = true; // Slave leaves idle_loop()
 
                         threads[i].notify_one(); // Could be sleeping
-
-                        if (++slavesCnt + 1 >= maxThreadsPerSplitPoint) // Master is always included
-                        {
-                            break;
-                        }
                     }
                 }
-
-                master.splitPointsSize++;
 
                 ThreadHelper.lock_release(sp.Lock);
                 ThreadHelper.lock_release(splitLock);
@@ -732,7 +725,7 @@ namespace Portfish
                 // We pass the split point as a parameter to the idle loop, which means that
                 // the thread will return from the idle loop when all slaves have finished
                 // their work at this split point.
-                if (slavesCnt != 0 || Fake)
+                if (slavesCnt > 1 || Fake)
                 {
                     master.base_idle_loop(null); // Force a call to base class idle_loop()
 
