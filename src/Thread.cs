@@ -134,13 +134,13 @@ namespace Portfish
 
         internal volatile int splitPointsCnt;
 
-        internal volatile bool is_searching;
+        internal volatile bool searching;
 
         internal volatile bool do_exit;
 
         internal Thread(ManualResetEvent initEvent)
         {
-            this.is_searching = this.do_exit = false;
+            this.searching = this.do_exit = false;
             this.maxPly = this.splitPointsCnt = 0;
             this.curSplitPoint = null;
             this.idx = Threads.size();
@@ -167,7 +167,7 @@ namespace Portfish
         internal void base_idle_loop(ManualResetEvent initEvent)
         {
             var sp_master = this.splitPointsCnt > 0 ? this.curSplitPoint : null;
-            Debug.Assert(sp_master == null || (sp_master.master == this && this.is_searching));
+            Debug.Assert(sp_master == null || (sp_master.master == this && this.searching));
 
             if (initEvent != null)
             {
@@ -181,7 +181,7 @@ namespace Portfish
             {
                 // If we are not searching, wait for a condition to be signaled
                 // instead of wasting CPU time polling for work.
-                while (do_exit || (!is_searching && Threads.sleepWhileIdle))
+                while (do_exit || (!this.searching && Threads.sleepWhileIdle))
                 {
                     if (this.do_exit)
                     {
@@ -203,7 +203,7 @@ namespace Portfish
                     // particular we need to avoid a deadlock in case a master thread has,
                     // in the meanwhile, allocated us and sent the notify_one() call before we
                     // had the chance to grab the lock.
-                    if (!is_searching && !do_exit)
+                    if (!this.searching && !do_exit)
                     {
                         ThreadHelper.cond_wait(this.sleepCond, this.sleepLock);
                     }
@@ -212,13 +212,13 @@ namespace Portfish
                 }
 
                 // If this thread has been assigned work, launch a search
-                if (this.is_searching)
+                if (this.searching)
                 {
                     Debug.Assert( /*!this.is_finished &&*/ !this.do_exit);
 
                     ThreadHelper.lock_grab(Threads.splitLock);
 
-                    Debug.Assert(this.is_searching);
+                    Debug.Assert(this.searching);
                     var sp = this.curSplitPoint;
 
                     ThreadHelper.lock_release(Threads.splitLock);
@@ -256,9 +256,9 @@ namespace Portfish
                         Debug.Assert(false);
                     }
 
-                    Debug.Assert(this.is_searching);
+                    Debug.Assert(this.searching);
 
-                    this.is_searching = false;
+                    this.searching = false;
                     sp.activePositions[idx] = null;
 #if ACTIVE_REPARENT
                     sp.allSlavesRunning = false;
@@ -268,9 +268,9 @@ namespace Portfish
 
                     // Wake up master thread so to allow it to return from the idle loop in
                     // case we are the last slave of the split point.
-                    if (Threads.sleepWhileIdle && this != sp.master && !sp.master.is_searching && sp.slavesMask != 0)
+                    if (Threads.sleepWhileIdle && this != sp.master && !sp.master.searching && sp.slavesMask != 0)
                     {
-                        Debug.Assert(!sp.master.is_searching);
+                        Debug.Assert(!sp.master.searching);
                         sp.master.notify_one();
                     }
 
@@ -308,7 +308,7 @@ namespace Portfish
                             {
                                 latest.slavesMask |= 1UL << idx;
                                 curSplitPoint = latest;
-                                is_searching = true;
+                                searching = true;
                             }
 
                             ThreadHelper.lock_release(Threads.splitLock);
@@ -372,7 +372,7 @@ namespace Portfish
         // point stack (the "helpful master concept" in YBWC terminology).
         internal bool is_available_to(Thread master)
         {
-            if (this.is_searching)
+            if (this.searching)
             {
                 return false;
             }
@@ -391,6 +391,9 @@ namespace Portfish
 
         #endregion
     }
+
+    // MainThread and TimerThread are sublassed from Thread to charaterize the two
+    // special threads: the main one and the recurring timer.
 
     internal sealed class TimerThread : Thread
     {
@@ -431,12 +434,12 @@ namespace Portfish
 
     internal sealed class MainThread : Thread
     {
-        internal volatile bool is_finished;
+        internal volatile bool thinking;
 
         internal MainThread(ManualResetEvent initEvent)
             : base(initEvent)
         {
-            is_finished = false;
+            thinking = true; // Avoid a race with start_thinking()
         }
 
         // Thread::main_loop() is where the main thread is parked waiting to be started
@@ -457,10 +460,10 @@ namespace Portfish
             {
                 ThreadHelper.lock_grab(this.sleepLock);
 
-                this.is_finished = true; // Always return to sleep after a search
-                this.is_searching = false;
+                this.thinking = false; 
+                this.searching = false;
 
-                while (this.is_finished && !this.do_exit)
+                while (!this.thinking && !this.do_exit)
                 {
                     ThreadHelper.cond_signal(Threads.sleepCond); // Wake up UI thread if needed
                     ThreadHelper.cond_wait(this.sleepCond, this.sleepLock);
@@ -473,9 +476,12 @@ namespace Portfish
                     return;
                 }
 
-                this.is_searching = true;
+                this.searching = true;
 
                 Search.think(); // This is the search entry point
+
+                Debug.Assert(searching);
+                searching = false;
             }
         }
 
@@ -506,11 +512,6 @@ namespace Portfish
             internal static bool sleepWhileIdle;
 
             //internal static bool use_sleeping_threads() { return useSleepingThreads; }
-            internal static int min_split_depth()
-            {
-                return minimumSplitDepth;
-            }
-
             internal static int size()
             {
                 return threads.Count;
@@ -682,7 +683,7 @@ namespace Portfish
                 sp.ss = ss;
                 sp.ssPos = ssPos;
 
-                Debug.Assert(master.is_searching);
+                Debug.Assert(master.searching);
                 master.curSplitPoint = sp;
 
                 var slavesCnt = 0;
@@ -696,7 +697,7 @@ namespace Portfish
                     {
                         sp.slavesMask |= 1UL << i;
                         threads[i].curSplitPoint = sp;
-                        threads[i].is_searching = true; // Slave leaves idle_loop()
+                        threads[i].searching = true; // Slave leaves idle_loop()
 
                         threads[i].notify_one(); // Could be sleeping
 
@@ -713,7 +714,7 @@ namespace Portfish
                 ThreadHelper.lock_release(splitLock);
 
                 // Everything is set up. The master thread enters the idle loop, from which
-                // it will instantly launch a search, because its is_searching flag is set.
+                // it will instantly launch a search, because its searching flag is set.
                 // We pass the split point as a parameter to the idle loop, which means that
                 // the thread will return from the idle loop when all slaves have finished
                 // their work at this split point.
@@ -723,16 +724,16 @@ namespace Portfish
 
                     // In helpful master concept a master can help only a sub-tree of its split
                     // point, and because here is all finished is not possible master is booked.
-                    Debug.Assert(!master.is_searching);
+                    Debug.Assert(!master.searching);
                 }
 
                 // We have returned from the idle loop, which means that all threads are
-                // finished. Note that setting is_searching and decreasing activeSplitPoints is
+                // finished. Note that setting searching and decreasing activeSplitPoints is
                 // done under lock protection to avoid a race with Thread::is_available_to().
                 ThreadHelper.lock_grab(splitLock);
                 ThreadHelper.lock_grab(sp.Lock); // To protect sp->nodes
 
-                master.is_searching = true;
+                master.searching = true;
                 master.splitPointsCnt--;
                 master.curSplitPoint = sp.parent;
                 pos.nodes += sp.nodes;
@@ -744,11 +745,11 @@ namespace Portfish
                 return sp.bestValue;
             }
 
-            // ThreadsManager::start_searching() wakes up the main thread sleeping in
+            // ThreadsManager::start_thinking() wakes up the main thread sleeping in
             // main_loop() so to start a new search, then returns immediately.
-            internal static void start_searching(Position pos, LimitsType limits, List<int> searchMoves)
+            internal static void start_thinking(Position pos, LimitsType limits, List<int> searchMoves)
             {
-                wait_for_search_finished();
+                wait_for_think_finished();
 
                 Search.SearchTime.Reset();
                 Search.SearchTime.Start(); // As early as possible
@@ -773,18 +774,18 @@ namespace Portfish
                 }
                 MListBroker.Free();
 
-                main_thread().is_finished = false;
+                main_thread().thinking = true;
                 main_thread().notify_one();
             }
 
-            // ThreadsManager::wait_for_search_finished() waits for main thread to go to
+            // ThreadsManager::wait_for_think_finished() waits for main thread to go to
             // sleep, this means search is finished. Then returns.
-            internal static void wait_for_search_finished()
+            internal static void wait_for_think_finished()
             {
                 var t = main_thread();
                 ThreadHelper.lock_grab(t.sleepLock);
                 ThreadHelper.cond_signal(t.sleepCond); // In case is waiting for stop or ponderhit
-                while (!t.is_finished)
+                while (t.thinking)
                 {
                     ThreadHelper.cond_wait(sleepCond, t.sleepLock);
                 }

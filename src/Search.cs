@@ -1467,7 +1467,7 @@ namespace Portfish
 
                 // Step 19. Check for split
                 if (!SpNode 
-                    && depth >= Threads.min_split_depth() 
+                    && depth >= Threads.minimumSplitDepth 
                     && Threads.available_slave_exists(thisThread))
                 {
                     Debug.Assert(bestValue < beta);

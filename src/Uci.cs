@@ -159,7 +159,7 @@ namespace Portfish
 
                 if (args.Length > 0) // Command line arguments have one-shot behaviour
                 {
-                    Threads.wait_for_search_finished();
+                    Threads.wait_for_think_finished();
                     break;
                 }
             }
@@ -308,7 +308,7 @@ namespace Portfish
                 }
             }
 
-            Threads.start_searching(pos, limits, searchMoves);
+            Threads.start_thinking(pos, limits, searchMoves);
         }
     }
 }

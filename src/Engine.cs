@@ -38,7 +38,7 @@
             var pos = new Position(Uci.StartFEN, false, Threads.main_thread());
             var stack = Utils.CreateStack("go depth 7");
             Uci.go(pos, stack);
-            Threads.wait_for_search_finished();
+            Threads.wait_for_think_finished();
             Plug.IsWarmup = false;
 
             var sb = new StringBuilder();
