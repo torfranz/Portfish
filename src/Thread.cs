@@ -709,7 +709,7 @@ namespace Portfish
                 {
                     if (threads[i].is_available_to(master) && ++slavesCnt <= maxThreadsPerSplitPoint)
                     {
-                        sp.slavesMask |= 1UL << i;
+                        sp.slavesMask |= 1UL << threads[i].idx;
                         threads[i].activeSplitPoint = sp;
                         threads[i].searching = true; // Slave leaves idle_loop()
 
@@ -752,8 +752,8 @@ namespace Portfish
                 return sp.bestValue;
             }
 
-            // ThreadsManager::start_thinking() wakes up the main thread sleeping in
-            // main_loop() so to start a new search, then returns immediately.
+            // start_thinking() wakes up the main thread sleeping in MainThread::idle_loop()
+            // so to start a new search, then returns immediately.
             internal static void start_thinking(Position pos, LimitsType limits, List<int> searchMoves)
             {
                 wait_for_think_finished();
