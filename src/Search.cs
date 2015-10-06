@@ -821,7 +821,6 @@ namespace Portfish
 
             // Step 1. Initialize node
             var thisThread = pos.this_thread();
-            //var threatExtension = false;
             inCheck = pos.in_check();
             
             if (SpNode)
@@ -1050,27 +1049,8 @@ namespace Portfish
                 }
                 else
                 {
-                    // The null move failed low, which means that we may be faced with
-                    // some kind of threat. If the previous move was reduced, check if
-                    // the move that refuted the null move was somehow connected to the
-                    // the move that refuted the null move was somehow connected to the
-                    // move which was reduced. If a connection is found extend moves that
-                    // defend against threat.
+                    // some kind of threat.
                     threatMove = ss[ssPos + 1].currentMove;
-
-                    if (depth < 5 * DepthC.ONE_PLY && (ss[ssPos - 1].reduction != 0) && threatMove != MoveC.MOVE_NONE
-                        && allows_move(pos, ss[ssPos - 1].currentMove, threatMove))
-                    {
-                        //threatExtension = true;
-                        
-                        if (st != null)
-                        {
-                            st.previous = null;
-                            StateInfoBroker.Free();
-                        }
-                        MovesSearchedBroker.Free();
-                        return beta - 1;
-                    }
                 }
             }
 
@@ -1240,10 +1220,6 @@ namespace Portfish
                 {
                     ext = DepthC.ONE_PLY;
                 }
-                // else if (threatExtension && prevents_move(pos, move, threatMove))
-                // {
-                // ext = DepthC.ONE_PLY;
-                // }
                 else if (givesCheck && pos.see(move, true) >= 0)
                 {
                     ext = DepthC.ONE_PLY / 2;
@@ -1274,13 +1250,16 @@ namespace Portfish
                 newDepth = depth - DepthC.ONE_PLY + ext;
 
                 // Step 13. Futility pruning (is omitted in PV nodes)
-                if (!PvNode && !inCheck && !captureOrPromotion && !dangerous && move != ttMove
+                if (!PvNode
+                    && !captureOrPromotion
+                    && !inCheck 
+                    && !dangerous 
+                    && move != ttMove
+                    && (threatMove == 0 || !prevents_move(pos, move, threatMove))
                     && (bestValue > ValueC.VALUE_MATED_IN_MAX_PLY || (bestValue == -ValueC.VALUE_INFINITE && alpha > ValueC.VALUE_MATED_IN_MAX_PLY)))
                 {
                     // Move count based pruning
-                    if (depth < 16 * DepthC.ONE_PLY
-                        && moveCount >= FutilityMoveCounts[depth]
-                        && ((threatMove == 0) || !prevents_move(pos, move, threatMove)))
+                    if (depth < 16 * DepthC.ONE_PLY && moveCount >= FutilityMoveCounts[depth])
                     {
                         if (SpNode)
                         {
@@ -1905,52 +1884,6 @@ namespace Portfish
                     return true;
                 }
             }
-            return false;
-        }
-
-        // allows_move() tests whether the move at previous ply(first) somehow makes a
-        // second move possible, for instance if the moving piece is the same in both
-        // moves. Normally the second move is the threat move (the best move returned
-        // from a null search that fails low).
-        internal static bool allows_move(Position pos, int first, int second)
-        {
-            Debug.Assert(Utils.is_ok_M(first));
-            Debug.Assert(Utils.is_ok_M(second));
-            Debug.Assert(Utils.color_of(pos.piece_on(Utils.from_sq(second))) == 1 - pos.sideToMove);
-
-            Square m1to = Utils.to_sq(first);
-            Square m1from = Utils.from_sq(first);
-            Square m2to = Utils.to_sq(second);
-            Square m2from = Utils.from_sq(second);
-
-
-            // The piece is the same or second's destination was vacated by the first move
-            if (m1to == m2from || m2to == m1from)
-            {
-                return true;
-            }
-
-            // Second one moves through the square vacated by first one
-            if (Utils.bit_is_set(Utils.between_bb(m2from, m2to), m1from) != 0)
-            {
-                return true;
-            }
-
-            // Second's destination is defended by the first move's piece
-            Bitboard m1att = Position.attacks_from(pos.piece_on(m1to), m1to, pos.pieces() ^ (ulong)m2from);
-            if (Utils.bit_is_set(m1att, m2to) != 0)
-            {
-                return true;
-            }
-
-            // Second move gives a discovered check through the first's checking piece
-            if (Utils.bit_is_set(m1att, pos.king_square(pos.sideToMove)) != 0 &&
-                Utils.bit_is_set(Utils.between_bb(m1to, pos.king_square(pos.sideToMove)), m2from) != 0) // TODO: removing condition asserts below
-            {
-                Debug.Assert(Utils.bit_is_set(Utils.between_bb(m1to, pos.king_square(pos.sideToMove)), m2from) != 0);
-                return true;
-            }
-
             return false;
         }
 
