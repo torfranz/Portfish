@@ -203,7 +203,7 @@ namespace Portfish
                     // particular we need to avoid a deadlock in case a master thread has,
                     // in the meanwhile, allocated us and sent the notify_one() call before we
                     // had the chance to grab the lock.
-                    if (!is_searching && Threads.sleepWhileIdle)
+                    if (!is_searching && !do_exit)
                     {
                         ThreadHelper.cond_wait(this.sleepCond, this.sleepLock);
                     }
@@ -411,17 +411,20 @@ namespace Portfish
             while (!this.do_exit)
             {
                 ThreadHelper.lock_grab(this.sleepLock);
-                do
-                {
+                if (!do_exit)
+                { 
                     ThreadHelper.cond_timedwait(
                         this.sleepCond,
                         this.sleepLock,
                         this.msec != 0 ? this.msec : Constants.INT_MAX);
                 }
-                while (msec == 0 && !do_exit); // Don't allow wakeups when msec = 0
-
+                
                 ThreadHelper.lock_release(this.sleepLock);
-                Search.check_time();
+
+                if (msec != 0)
+                {
+                    Search.check_time();
+                }
             }
         }
     }
