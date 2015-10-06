@@ -1075,9 +1075,8 @@ namespace Portfish
             {
                 fen.Append(
                     this.chess960
-                        ? (Utils.toupper(
-                            Utils.file_to_char(
-                                Utils.file_of(this.castle_rook_square(ColorC.WHITE, CastlingSideC.KING_SIDE)))))
+                        ? Utils.file_to_char(
+                                Utils.file_of(this.castle_rook_square(ColorC.WHITE, CastlingSideC.KING_SIDE)), false)
                         : 'K');
             }
 
@@ -1085,9 +1084,8 @@ namespace Portfish
             {
                 fen.Append(
                     this.chess960
-                        ? (Utils.toupper(
-                            Utils.file_to_char(
-                                Utils.file_of(this.castle_rook_square(ColorC.WHITE, CastlingSideC.QUEEN_SIDE)))))
+                        ? Utils.file_to_char(
+                                Utils.file_of(this.castle_rook_square(ColorC.WHITE, CastlingSideC.QUEEN_SIDE)), false)
                         : 'Q');
             }
 

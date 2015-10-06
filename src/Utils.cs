@@ -432,9 +432,9 @@ namespace Portfish
             return token.ToString().ToLowerInvariant()[0];
         }
 
-        internal static char file_to_char(int f)
+        internal static char file_to_char(int f, bool tolower = true)
         {
-            return (char)(f - FileC.FILE_A + 'a');
+            return (char)(f - FileC.FILE_A + (tolower ? 'a' : 'A'));
         }
 
         internal static char rank_to_char(int r)
