@@ -70,7 +70,7 @@ namespace Portfish
                     if (token != "ponderhit" || Search.SignalsStopOnPonderhit)
                     {
                         Search.SignalsStop = true;
-                        Threads.main_thread().wake_up(); // Could be sleeping
+                        Threads.main_thread().notify_one(); // Could be sleeping
                     }
                     else
                     {

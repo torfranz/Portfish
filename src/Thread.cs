@@ -201,16 +201,16 @@ namespace Portfish
             Debug.Assert(this.do_sleep);
 
             this.do_exit = true; // Search must be already finished
-            this.wake_up();
+            this.notify_one();
         }
 
-        // Thread::wake_up() wakes up the thread, normally at the beginning of the search
+        // Thread::notify_one() wakes up the thread, normally at the beginning of the search
         // or, if "sleeping threads" is used at split time.
 #if AGGR_INLINE
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #endif
 
-        internal void wake_up()
+        internal void notify_one()
         {
             ThreadHelper.lock_grab(this.sleepLock);
             ThreadHelper.cond_signal(this.sleepCond);
@@ -366,7 +366,7 @@ namespace Portfish
                         return;
                     }
 
-                    // Grab the lock to avoid races with Thread::wake_up()
+                    // Grab the lock to avoid races with Thread::notify_one()
                     ThreadHelper.lock_grab(this.sleepLock);
 
                     // If we are master and all slaves have finished don't go to sleep
@@ -378,7 +378,7 @@ namespace Portfish
 
                     // Do sleep after retesting sleep conditions under lock protection, in
                     // particular we need to avoid a deadlock in case a master thread has,
-                    // in the meanwhile, allocated us and sent the wake_up() call before we
+                    // in the meanwhile, allocated us and sent the notify_one() call before we
                     // had the chance to grab the lock.
                     if (this.do_sleep || !this.is_searching)
                     {
@@ -448,7 +448,7 @@ namespace Portfish
                     if (use_sleeping_threads && this != sp.master && !sp.master.is_searching && sp.slavesMask != 0)
                     {
                         Debug.Assert(!sp.master.is_searching);
-                        sp.master.wake_up();
+                        sp.master.notify_one();
                     }
 
                     // After releasing the lock we cannot access anymore any SplitPoint
@@ -721,7 +721,7 @@ namespace Portfish
 
                     if (useSleepingThreads)
                     {
-                        threads[i].wake_up();
+                        threads[i].notify_one();
                     }
 
                     if (++slavesCnt + 1 >= maxThreadsPerSplitPoint) // Master is always included
@@ -797,7 +797,7 @@ namespace Portfish
             MListBroker.Free();
 
             main_thread().do_sleep = false;
-            main_thread().wake_up();
+            main_thread().notify_one();
         }
 
         // ThreadsManager::wait_for_search_finished() waits for main thread to go to
@@ -818,13 +818,11 @@ namespace Portfish
         // milliseconds. If msec is 0 then timer is stopped.
         internal static void set_timer(int msec)
         {
-            ThreadHelper.lock_grab(timer.sleepLock);
             timer.maxPly = msec;
-            ThreadHelper.cond_signal(timer.sleepCond); // Wake up and restart the timer
-            ThreadHelper.lock_release(timer.sleepLock);
+            timer.notify_one(); // Wake up and restart the timer
         }
 
-        // wake_up() is called before a new search to start the threads that are waiting
+        // notify_one() is called before a new search to start the threads that are waiting
         // on the sleep condition and to reset maxPly. When useSleepingThreads is set
         // threads will be woken up at split time.
         internal static void wake_up()
@@ -836,7 +834,7 @@ namespace Portfish
 
                 if (!useSleepingThreads)
                 {
-                    threads[i].wake_up();
+                    threads[i].notify_one();
                 }
             }
         }
