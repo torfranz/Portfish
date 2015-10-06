@@ -1039,36 +1039,28 @@ namespace Portfish
         {
             //std::ostringstream fen;
             var fen = new StringBuilder();
-            int sq;
-            int emptyCnt;
-
+            
             for (var rank = RankC.RANK_8; rank >= RankC.RANK_1; rank--)
             {
-                emptyCnt = 0;
-
                 for (var file = FileC.FILE_A; file <= FileC.FILE_H; file++)
                 {
-                    sq = Utils.make_square(file, rank);
+                    Square sq = Utils.make_square(file, rank);
 
                     if (this.is_empty(sq))
                     {
-                        emptyCnt++;
+                        int emptyCnt = 1;
+
+                        for (; file < FileC.FILE_H && is_empty(sq++); file++)
+                        {
+                            emptyCnt++;
+                        }
+
+                        fen.Append(emptyCnt.ToString());
                     }
                     else
                     {
-                        if (emptyCnt > 0)
-                        {
-                            //fen << emptyCnt;
-                            fen.Append(emptyCnt.ToString());
-                            emptyCnt = 0;
-                        }
                         fen.Append(PieceToChar[this.piece_on(sq)]);
                     }
-                }
-
-                if (emptyCnt > 0)
-                {
-                    fen.Append(emptyCnt.ToString());
                 }
 
                 if (rank > RankC.RANK_1)
