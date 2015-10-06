@@ -164,7 +164,7 @@ namespace Portfish
             this.loopType = lt;
             this.idx = Threads.size();
 
-            this.do_sleep = this.loopType != ThreadLoopType.Main; // Avoid a race with start_searching()
+            this.do_sleep = true;
 
             for (var j = 0; j < Constants.MAX_SPLITPOINTS_PER_THREAD; j++)
             {
