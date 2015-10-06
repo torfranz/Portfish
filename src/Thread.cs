@@ -164,7 +164,7 @@ namespace Portfish
             this.loopType = lt;
             this.idx = Threads.size();
 
-            this.do_sleep = true;
+            this.do_sleep = this.loopType != ThreadLoopType.Main; // Avoid a race with start_searching()
 
             for (var j = 0; j < Constants.MAX_SPLITPOINTS_PER_THREAD; j++)
             {
@@ -305,10 +305,13 @@ namespace Portfish
             while (!this.do_exit)
             {
                 ThreadHelper.lock_grab(this.sleepLock);
-                ThreadHelper.cond_timedwait(
-                    this.sleepCond,
-                    this.sleepLock,
-                    this.maxPly != 0 ? this.maxPly : Constants.INT_MAX);
+                while (maxPly == 0 && !do_exit)
+                {
+                    ThreadHelper.cond_timedwait(
+                        this.sleepCond,
+                        this.sleepLock,
+                        this.maxPly != 0 ? this.maxPly : Constants.INT_MAX);
+                }
                 ThreadHelper.lock_release(this.sleepLock);
                 Search.check_time();
             }
@@ -526,6 +529,11 @@ namespace Portfish
         internal static Thread main_thread()
         {
             return threads[0];
+        }
+
+        internal static Thread timer_thread()
+        {
+            return timer;
         }
 
         // read_uci_options() updates internal threads parameters from the corresponding
@@ -788,14 +796,6 @@ namespace Portfish
                 ThreadHelper.cond_wait(sleepCond, t.sleepLock);
             }
             ThreadHelper.lock_release(t.sleepLock);
-        }
-
-        // ThreadsManager::set_timer() is used to set the timer to trigger after msec
-        // milliseconds. If msec is 0 then timer is stopped.
-        internal static void set_timer(int msec)
-        {
-            timer.maxPly = msec;
-            timer.notify_one(); // Wake up and restart the timer
         }
 
         // sleep() is called after the search finishes to ask all the threads but the
