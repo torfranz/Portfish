@@ -1468,7 +1468,7 @@ namespace Portfish
                 // Step 19. Check for split
                 if (!SpNode 
                     && depth >= Threads.minimumSplitDepth 
-                    && Threads.available_slave_exists(thisThread))
+                    && Threads.slave_available(thisThread))
                 {
                     Debug.Assert(bestValue < beta);
 
@@ -2157,7 +2157,7 @@ namespace Portfish
                 // all the currently active slaves positions.
                 for (var i = 0; i < Threads.size(); i++)
                 {
-                    for (int j = 0; j < Threads.thread(i).splitPointsCnt; j++)
+                    for (int j = 0; j < Threads.thread(i).splitPointsSize; j++)
                     {
                         SplitPoint sp = Threads.thread(i).splitPoints[j];
 
@@ -2167,7 +2167,7 @@ namespace Portfish
                         Bitboard sm = sp.slavesMask;
                         while (sm != 0)
                         {
-                            Position pos = sp.activePositions[Utils.pop_lsb(ref sm)];
+                            Position pos = sp.slavesPositions[Utils.pop_lsb(ref sm)];
                             nodes += pos?.nodes ?? 0;
                         }
 

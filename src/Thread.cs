@@ -55,7 +55,7 @@ namespace Portfish
         // Shared data
         internal readonly object Lock = new object();
 
-        internal Position[] activePositions = new Position[Constants.MAX_THREADS];
+        internal Position[] slavesPositions = new Position[Constants.MAX_THREADS];
 
         internal ulong slavesMask;
 
@@ -130,9 +130,9 @@ namespace Portfish
 
         internal readonly object sleepCond = new object();
 
-        internal volatile SplitPoint curSplitPoint;
+        internal volatile SplitPoint activeSplitPoint;
 
-        internal volatile int splitPointsCnt;
+        internal volatile int splitPointsSize;
 
         internal volatile bool searching;
 
@@ -141,8 +141,8 @@ namespace Portfish
         internal Thread(ManualResetEvent initEvent)
         {
             this.searching = this.do_exit = false;
-            this.maxPly = this.splitPointsCnt = 0;
-            this.curSplitPoint = null;
+            this.maxPly = this.splitPointsSize = 0;
+            this.activeSplitPoint = null;
             this.idx = Threads.size();
 
             for (var j = 0; j < Constants.MAX_SPLITPOINTS_PER_THREAD; j++)
@@ -166,8 +166,8 @@ namespace Portfish
 
         internal void base_idle_loop(ManualResetEvent initEvent)
         {
-            var sp_master = this.splitPointsCnt > 0 ? this.curSplitPoint : null;
-            Debug.Assert(sp_master == null || (sp_master.master == this && this.searching));
+            var this_sp = this.splitPointsSize > 0 ? this.activeSplitPoint : null;
+            Debug.Assert(this_sp  == null || (this_sp .master == this && this.searching));
 
             if (initEvent != null)
             {
@@ -177,7 +177,7 @@ namespace Portfish
 
             // If this thread is the master of a split point and all slaves have
             // finished their work at this split point, return from the idle loop.
-            while ((sp_master == null) || (sp_master.slavesMask != 0))
+            while ((this_sp  == null) || (this_sp .slavesMask != 0))
             {
                 // If we are not searching, wait for a condition to be signaled
                 // instead of wasting CPU time polling for work.
@@ -185,7 +185,7 @@ namespace Portfish
                 {
                     if (this.do_exit)
                     {
-                        Debug.Assert(sp_master == null);
+                        Debug.Assert(this_sp  == null);
                         return;
                     }
 
@@ -193,7 +193,7 @@ namespace Portfish
                     ThreadHelper.lock_grab(this.sleepLock);
 
                     // If we are master and all slaves have finished don't go to sleep
-                    if ((sp_master != null) && (sp_master.slavesMask == 0))
+                    if ((this_sp  != null) && (this_sp .slavesMask == 0))
                     {
                         ThreadHelper.lock_release(this.sleepLock);
                         break;
@@ -219,7 +219,7 @@ namespace Portfish
                     ThreadHelper.lock_grab(Threads.splitLock);
 
                     Debug.Assert(this.searching);
-                    var sp = this.curSplitPoint;
+                    var sp = this.activeSplitPoint;
 
                     ThreadHelper.lock_release(Threads.splitLock);
 
@@ -235,31 +235,45 @@ namespace Portfish
 
                     ThreadHelper.lock_grab(sp.Lock);
 
-                    Debug.Assert(sp.activePositions[idx] == null);
+                    Debug.Assert(sp.slavesPositions[idx] == null);
 
-                    sp.activePositions[idx] = pos;
+                    sp.slavesPositions[idx] = pos;
 
-                    if (sp.nodeType == NodeTypeC.Root)
+                    switch (sp.nodeType)
                     {
-                        Search.search(NodeTypeC.SplitPointRoot, pos, ss, ssPos + 1, sp.alpha, sp.beta, sp.depth);
-                    }
-                    else if (sp.nodeType == NodeTypeC.PV)
-                    {
-                        Search.search(NodeTypeC.SplitPointPV, pos, ss, ssPos + 1, sp.alpha, sp.beta, sp.depth);
-                    }
-                    else if (sp.nodeType == NodeTypeC.NonPV)
-                    {
-                        Search.search(NodeTypeC.SplitPointNonPV, pos, ss, ssPos + 1, sp.alpha, sp.beta, sp.depth);
-                    }
-                    else
-                    {
-                        Debug.Assert(false);
+                        case NodeTypeC.Root:
+                            {
+                                Search.search(NodeTypeC.SplitPointRoot, pos, ss, ssPos + 1, sp.alpha, sp.beta, sp.depth);
+                            }
+                            break;
+                        case NodeTypeC.PV:
+                            {
+                                Search.search(NodeTypeC.SplitPointPV, pos, ss, ssPos + 1, sp.alpha, sp.beta, sp.depth);
+                            }
+                            break;
+                        case NodeTypeC.NonPV:
+                            {
+                                Search.search(
+                                    NodeTypeC.SplitPointNonPV,
+                                    pos,
+                                    ss,
+                                    ssPos + 1,
+                                    sp.alpha,
+                                    sp.beta,
+                                    sp.depth);
+                            }
+                            break;
+                        default:
+                            {
+                                Debug.Assert(false);
+                            }
+                            break;
                     }
 
                     Debug.Assert(this.searching);
 
                     this.searching = false;
-                    sp.activePositions[idx] = null;
+                    sp.slavesPositions[idx] = null;
 #if ACTIVE_REPARENT
                     sp.allSlavesRunning = false;
 #endif
@@ -286,7 +300,7 @@ namespace Portfish
                     for (int i = 0; i < Threads.size(); i++)
                     {
                         Thread th = Threads.threads[i];
-                        int spCnt = th.splitPointsCnt;
+                        int spCnt = th.splitPointsSize;
                         SplitPoint latest = th.splitPoints[spCnt != 0 ? spCnt - 1 : 0];
 
                         if (this.is_available_to(th)
@@ -301,13 +315,13 @@ namespace Portfish
                             // Retest all under lock protection, we are in the middle
                             // of a race storm here !
                             if (this.is_available_to(th)
-                                && spCnt == th.splitPointsCnt
+                                && spCnt == th.splitPointsSize
                                 && !th.cutoff_occurred()
                                 && latest.allSlavesRunning
                                 && Utils.more_than_one(latest.slavesMask))
                             {
                                 latest.slavesMask |= 1UL << idx;
-                                curSplitPoint = latest;
+                                activeSplitPoint = latest;
                                 searching = true;
                             }
 
@@ -354,7 +368,7 @@ namespace Portfish
         // current active split point, or in some ancestor of the split point.
         internal bool cutoff_occurred()
         {
-            for (var sp = this.curSplitPoint; sp != null; sp = sp.parent)
+            for (var sp = this.activeSplitPoint; sp != null; sp = sp.parent)
             {
                 if (sp.cutoff)
                 {
@@ -379,11 +393,11 @@ namespace Portfish
 
             // Make a local copy to be sure doesn't become zero under our feet while
             // testing next condition and so leading to an out of bound access.
-            var spCnt = this.splitPointsCnt;
+            var size = this.splitPointsSize;
 
             // No active split points means that the thread is available as a slave for any
             // other thread otherwise apply the "helpful master" concept if possible.
-            return (spCnt == 0) || ((this.splitPoints[spCnt - 1].slavesMask & (1UL << master.idx)) != 0);
+            return (size  == 0) || ((this.splitPoints[size  - 1].slavesMask & (1UL << master.idx)) != 0);
         }
 
         #region Loops
@@ -606,9 +620,9 @@ namespace Portfish
                 timer.exit();
             }
 
-            // available_slave_exists() tries to find an idle thread which is available as
+            // slave_available() tries to find an idle thread which is available as
             // a slave for the thread with threadID 'master'.
-            internal static bool available_slave_exists(Thread master)
+            internal static bool slave_available(Thread master)
             {
                 for (var i = 0; i < size(); i++)
                 {
@@ -653,15 +667,15 @@ namespace Portfish
 
                 var master = pos.this_thread();
 
-                if (master.splitPointsCnt >= Constants.MAX_SPLITPOINTS_PER_THREAD)
+                if (master.splitPointsSize >= Constants.MAX_SPLITPOINTS_PER_THREAD)
                 {
                     return bestValue;
                 }
 
                 // Pick the next available split point from the split point stack
-                var sp = master.splitPoints[master.splitPointsCnt];
+                var sp = master.splitPoints[master.splitPointsSize];
 
-                sp.parent = master.curSplitPoint;
+                sp.parent = master.activeSplitPoint;
                 sp.master = master;
                 sp.cutoff = false;
                 sp.slavesMask = 1UL << master.idx;
@@ -684,7 +698,7 @@ namespace Portfish
                 sp.ssPos = ssPos;
 
                 Debug.Assert(master.searching);
-                master.curSplitPoint = sp;
+                master.activeSplitPoint = sp;
 
                 var slavesCnt = 0;
 
@@ -696,7 +710,7 @@ namespace Portfish
                     if (threads[i].is_available_to(master))
                     {
                         sp.slavesMask |= 1UL << i;
-                        threads[i].curSplitPoint = sp;
+                        threads[i].activeSplitPoint = sp;
                         threads[i].searching = true; // Slave leaves idle_loop()
 
                         threads[i].notify_one(); // Could be sleeping
@@ -708,7 +722,7 @@ namespace Portfish
                     }
                 }
 
-                master.splitPointsCnt++;
+                master.splitPointsSize++;
 
                 ThreadHelper.lock_release(sp.Lock);
                 ThreadHelper.lock_release(splitLock);
@@ -734,8 +748,8 @@ namespace Portfish
                 ThreadHelper.lock_grab(sp.Lock); // To protect sp->nodes
 
                 master.searching = true;
-                master.splitPointsCnt--;
-                master.curSplitPoint = sp.parent;
+                master.splitPointsSize--;
+                master.activeSplitPoint = sp.parent;
                 pos.nodes += sp.nodes;
                 bestMove = sp.bestMove;
 
