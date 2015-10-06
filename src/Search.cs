@@ -508,7 +508,17 @@ namespace Portfish
                 TT.set_size(ttSize);
             }
 
-            Threads.wake_up();
+            // Reset and wake up the threads
+            for (var i = 0; i < Threads.size(); i++)
+            {
+                Threads.threads[i].maxPly = 0;
+                Threads.threads[i].do_sleep = false;
+
+                if (!Threads.useSleepingThreads)
+                {
+                    Threads.threads[i].notify_one();
+                }
+            }
 
             // Set best timer interval to avoid lagging under time pressure. Timer is
             // used to check for remaining available thinking time.
@@ -530,7 +540,15 @@ namespace Portfish
 
             // Stop timer and send all the slaves to sleep, if not already sleeping
             Threads.set_timer(0); // Stop timer
-            Threads.sleep();
+
+            // Main thread will go to sleep by itself to avoid a race with start_searching()
+            for (var i = 1; i < Threads.size(); i++)
+            {
+                if (Threads.threads[i] != Threads.main_thread())
+                {
+                    Threads.threads[i].do_sleep = true;
+                }
+            }
 
 finalize:
 
@@ -539,7 +557,16 @@ finalize:
             // move before we are told to do so.
             if (!SignalsStop && (Limits.ponder || (Limits.infinite != 0)))
             {
-                RootPos.this_thread().wait_for_stop_or_ponderhit();
+                // Thread::wait_for() set the thread to sleep until condition 'b' turns true
+                SignalsStopOnPonderhit = true;
+                ThreadHelper.lock_grab(RootPos.this_thread().sleepLock);
+
+                while (!SignalsStop)
+                {
+                    ThreadHelper.cond_wait(RootPos.this_thread().sleepCond, RootPos.this_thread().sleepLock);
+                }
+
+                ThreadHelper.lock_release(RootPos.this_thread().sleepLock);
             }
 
             // Best move could be MOVE_NONE when searching on a stalemate position

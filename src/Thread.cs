@@ -217,30 +217,6 @@ namespace Portfish
             ThreadHelper.lock_release(this.sleepLock);
         }
 
-        // Thread::wait_for_stop_or_ponderhit() is called when the maximum depth is
-        // reached while the program is pondering. The point is to work around a wrinkle
-        // in the UCI protocol: When pondering, the engine is not allowed to give a
-        // "bestmove" before the GUI sends it a "stop" or "ponderhit" command. We simply
-        // wait here until one of these commands (that raise StopRequest) is sent and
-        // then return, after which the bestmove and pondermove will be printed.
-#if AGGR_INLINE
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-#endif
-
-        internal void wait_for_stop_or_ponderhit()
-        {
-            Search.SignalsStopOnPonderhit = true;
-
-            ThreadHelper.lock_grab(this.sleepLock);
-
-            while (!Search.SignalsStop)
-            {
-                ThreadHelper.cond_wait(this.sleepCond, this.sleepLock);
-            }
-
-            ThreadHelper.lock_release(this.sleepLock);
-        }
-
         // Thread::cutoff_occurred() checks whether a beta cutoff has occurred in the
         // current active split point, or in some ancestor of the split point.
         internal bool cutoff_occurred()
@@ -820,23 +796,6 @@ namespace Portfish
         {
             timer.maxPly = msec;
             timer.notify_one(); // Wake up and restart the timer
-        }
-
-        // notify_one() is called before a new search to start the threads that are waiting
-        // on the sleep condition and to reset maxPly. When useSleepingThreads is set
-        // threads will be woken up at split time.
-        internal static void wake_up()
-        {
-            for (var i = 0; i < size(); i++)
-            {
-                threads[i].maxPly = 0;
-                threads[i].do_sleep = false;
-
-                if (!useSleepingThreads)
-                {
-                    threads[i].notify_one();
-                }
-            }
         }
 
         // sleep() is called after the search finishes to ask all the threads but the
