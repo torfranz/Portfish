@@ -126,7 +126,7 @@
             this.Add("Min Split Depth", new UCIOption(idx++, msd, 4, 7, UCIOptionChanges.on_threads));
             this.Add("Max Threads per Split Point", new UCIOption(idx++, 5, 4, 8, UCIOptionChanges.on_threads));
             this.Add("Threads", new UCIOption(idx++, cpus, 1, Constants.MAX_THREADS, UCIOptionChanges.on_threads));
-            this.Add("Use Sleeping Threads", new UCIOption(idx++, false, UCIOptionChanges.on_threads));
+            this.Add("Use Sleeping Threads", new UCIOption(idx++, true, null));
                 // changed to false
             this.Add("Hash", new UCIOption(idx++, 32, 4, 8192, null));
                 // UCIOptionChanges.on_hash_size)); // hack, init on thread

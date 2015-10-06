@@ -512,19 +512,16 @@ namespace Portfish
             for (var i = 0; i < Threads.size(); i++)
             {
                 Threads.threads[i].maxPly = 0;
-                Threads.threads[i].do_sleep = false;
-
-                if (!Threads.useSleepingThreads)
-                {
-                    Threads.threads[i].notify_one();
-                }
             }
+
+            //TODO: using commented code engine does not take input
+            Threads.sleepWhileIdle = false;//bool.Parse(OptionMap.Instance["Use Sleeping Threads"].v);
 
             // Set best timer interval to avoid lagging under time pressure. Timer is
             // used to check for remaining available thinking time.
             Threads.timer_thread().maxPly = /* Hack: we use maxPly to set timer interval */
-            Limits.use_time_management() ? Math.Min(100, Math.Max(TimeMgr.available_time() / 16, TimerResolution)) :
-                     (Limits.nodes != 0) ? 2 * TimerResolution : 100;
+                    Limits.use_time_management() ? Math.Min(100, Math.Max(TimeMgr.available_time() / 16, TimerResolution)) :
+                             (Limits.nodes != 0) ? 2 * TimerResolution : 100;
 
             Threads.timer_thread().notify_one(); // Wake up the recurring timer
 
@@ -534,16 +531,9 @@ namespace Portfish
             // Stop timer and send all the slaves to sleep, if not already sleeping
             Threads.timer_thread().maxPly = 0; // Stop the timer
 
-            // Main thread will go to sleep by itself to avoid a race with start_searching()
-            for (var i = 1; i < Threads.size(); i++)
-            {
-                if (Threads.threads[i] != Threads.main_thread())
-                {
-                    Threads.threads[i].do_sleep = true;
-                }
-            }
+            Threads.sleepWhileIdle = true; // Send idle threads to sleep
 
-finalize:
+            finalize:
 
             // When we reach max depth we arrive here even without Signals.stop is raised,
             // but if we are pondering or in infinite search, we shouldn't print the best

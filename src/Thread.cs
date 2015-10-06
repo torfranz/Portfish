@@ -152,7 +152,7 @@ namespace Portfish
 
         internal volatile bool is_searching;
 
-        internal volatile bool do_sleep;
+        internal volatile bool is_finished;
 
         internal volatile bool do_exit;
 
@@ -164,7 +164,7 @@ namespace Portfish
             this.loopType = lt;
             this.idx = Threads.size();
 
-            this.do_sleep = this.loopType != ThreadLoopType.Main; // Avoid a race with start_searching()
+            this.is_finished = this.loopType != ThreadLoopType.Main; // Avoid a race with start_searching()
 
             for (var j = 0; j < Constants.MAX_SPLITPOINTS_PER_THREAD; j++)
             {
@@ -198,7 +198,7 @@ namespace Portfish
 
         internal void exit()
         {
-            Debug.Assert(this.do_sleep);
+            Debug.Assert(this.is_finished);
 
             this.do_exit = true; // Search must be already finished
             this.notify_one();
@@ -273,10 +273,10 @@ namespace Portfish
             {
                 ThreadHelper.lock_grab(this.sleepLock);
 
-                this.do_sleep = true; // Always return to sleep after a search
+                this.is_finished = true; // Always return to sleep after a search
                 this.is_searching = false;
 
-                while (this.do_sleep && !this.do_exit)
+                while (this.is_finished && !this.do_exit)
                 {
                     ThreadHelper.cond_signal(Threads.sleepCond); // Wake up UI thread if needed
                     ThreadHelper.cond_wait(this.sleepCond, this.sleepLock);
@@ -329,15 +329,13 @@ namespace Portfish
                 initEvent.Set();
             }
 
-            var use_sleeping_threads = Threads.useSleepingThreads;
-
             // If this thread is the master of a split point and all slaves have
             // finished their work at this split point, return from the idle loop.
             while ((sp_master == null) || (sp_master.slavesMask != 0))
             {
                 // If we are not searching, wait for a condition to be signaled
                 // instead of wasting CPU time polling for work.
-                while (this.do_sleep || this.do_exit || (!this.is_searching && use_sleeping_threads))
+                while (do_exit || (!is_searching && Threads.sleepWhileIdle))
                 {
                     if (this.do_exit)
                     {
@@ -359,7 +357,7 @@ namespace Portfish
                     // particular we need to avoid a deadlock in case a master thread has,
                     // in the meanwhile, allocated us and sent the notify_one() call before we
                     // had the chance to grab the lock.
-                    if (this.do_sleep || !this.is_searching)
+                    if (!is_searching && Threads.sleepWhileIdle)
                     {
                         ThreadHelper.cond_wait(this.sleepCond, this.sleepLock);
                     }
@@ -370,7 +368,7 @@ namespace Portfish
                 // If this thread has been assigned work, launch a search
                 if (this.is_searching)
                 {
-                    Debug.Assert(!this.do_sleep && !this.do_exit);
+                    Debug.Assert(/*!this.is_finished &&*/ !this.do_exit);
 
                     ThreadHelper.lock_grab(Threads.splitLock);
 
@@ -424,7 +422,7 @@ namespace Portfish
 
                     // Wake up master thread so to allow it to return from the idle loop in
                     // case we are the last slave of the split point.
-                    if (use_sleeping_threads && this != sp.master && !sp.master.is_searching && sp.slavesMask != 0)
+                    if (Threads.sleepWhileIdle && this != sp.master && !sp.master.is_searching && sp.slavesMask != 0)
                     {
                         Debug.Assert(!sp.master.is_searching);
                         sp.master.notify_one();
@@ -508,7 +506,7 @@ namespace Portfish
 
         internal static int maxThreadsPerSplitPoint;
 
-        internal static bool useSleepingThreads;
+        internal static bool sleepWhileIdle;
 
         //internal static bool use_sleeping_threads() { return useSleepingThreads; }
         internal static int min_split_depth()
@@ -544,8 +542,7 @@ namespace Portfish
         {
             maxThreadsPerSplitPoint = int.Parse(OptionMap.Instance["Max Threads per Split Point"].v);
             minimumSplitDepth = int.Parse(OptionMap.Instance["Min Split Depth"].v) * DepthC.ONE_PLY;
-            useSleepingThreads = bool.Parse(OptionMap.Instance["Use Sleeping Threads"].v);
-
+            
             var requested = int.Parse(OptionMap.Instance["Threads"].v);
             var current = 0;
 
@@ -596,6 +593,7 @@ namespace Portfish
             var initEvents = (ManualResetEvent[])state;
             timer = new Thread(ThreadLoopType.Timer, initEvents[0]);
             threads.Add(new Thread(ThreadLoopType.Main, initEvents[1]));
+            sleepWhileIdle = true;
             read_uci_options(initEvents);
         }
 
@@ -703,10 +701,7 @@ namespace Portfish
                     threads[i].curSplitPoint = sp;
                     threads[i].is_searching = true; // Slave leaves idle_loop()
 
-                    if (useSleepingThreads)
-                    {
-                        threads[i].notify_one();
-                    }
+                    threads[i].notify_one(); // Could be sleeping
 
                     if (++slavesCnt + 1 >= maxThreadsPerSplitPoint) // Master is always included
                     {
@@ -780,7 +775,7 @@ namespace Portfish
             }
             MListBroker.Free();
 
-            main_thread().do_sleep = false;
+            main_thread().is_finished = false;
             main_thread().notify_one();
         }
 
@@ -791,7 +786,7 @@ namespace Portfish
             var t = main_thread();
             ThreadHelper.lock_grab(t.sleepLock);
             ThreadHelper.cond_signal(t.sleepCond); // In case is waiting for stop or ponderhit
-            while (!t.do_sleep)
+            while (!t.is_finished)
             {
                 ThreadHelper.cond_wait(sleepCond, t.sleepLock);
             }
@@ -804,7 +799,7 @@ namespace Portfish
         {
             for (var i = 1; i < size(); i++) // Main thread will go to sleep by itself
             {
-                threads[i].do_sleep = true; // to avoid a race with start_searching()
+                threads[i].is_finished = true; // to avoid a race with start_searching()
             }
         }
     };
