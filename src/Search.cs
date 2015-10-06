@@ -519,7 +519,7 @@ namespace Portfish
 
             // Set best timer interval to avoid lagging under time pressure. Timer is
             // used to check for remaining available thinking time.
-            Threads.timer_thread().maxPly = /* Hack: we use maxPly to set timer interval */
+            Threads.timer_thread().msec = /* Hack: we use maxPly to set timer interval */
                     Limits.use_time_management() ? Math.Min(100, Math.Max(TimeMgr.available_time() / 16, TimerResolution)) :
                              (Limits.nodes != 0) ? 2 * TimerResolution : 100;
 
@@ -529,7 +529,7 @@ namespace Portfish
             id_loop(RootPos);
 
             // Stop timer and send all the slaves to sleep, if not already sleeping
-            Threads.timer_thread().maxPly = 0; // Stop the timer
+            Threads.timer_thread().msec = 0; // Stop the timer
 
             Threads.sleepWhileIdle = true; // Send idle threads to sleep
 
