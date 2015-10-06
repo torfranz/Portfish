@@ -66,15 +66,20 @@ namespace Portfish
                 }
                 else if (token == "ponderhit")
                 {
-                    // The opponent has played the expected move. GUI sends "ponderhit" if
-                    // we were told to ponder on the same move the opponent has played. We
-                    // should continue searching but switching from pondering to normal search.
-                    Search.Limits.ponder = false;
+                    // GUI sends "ponderhit" if we were told to ponder on the same move the
+                    // opponent has played. In case Signals.stopOnPonderhit is set we are
+                    // waiting for "ponderhit" to stop the search (for instance because we
+                    // already ran out of time), otherwise we should continue searching but
+                    // switching from pondering to normal search.
 
                     if (Search.SignalsStopOnPonderhit)
                     {
                         Search.SignalsStop = true;
                         Threads.main_thread().wake_up(); // Could be sleeping
+                    }
+                    else
+                    {
+                        Search.Limits.ponder = false;
                     }
                 }
                 else if (token == "go")
