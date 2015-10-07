@@ -752,7 +752,7 @@ namespace Portfish
 
                     if (Piece == PieceTypeC.BISHOP && ((Utils.PseudoAttacks[Piece][pos.king_square(Them)] & (ulong)s) != 0))
                     {
-                        var between = Utils.BetweenBB[s][pos.king_square(Them)] & pos.pieces();
+                        var between = Utils.BetweenBB[s][pos.king_square(Them)] & pos.occupied_squares;
                         if (!Utils.more_than_one(between))
                         {
                             score += Utils.make_score(25, 25);

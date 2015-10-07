@@ -1938,7 +1938,7 @@ namespace Portfish
             }
 
             // Second's destination is defended by the first move's piece
-            Bitboard m1att = Position.attacks_from(pos.piece_on(m1to), m1to, pos.pieces() ^ (ulong)m2from);
+            Bitboard m1att = Position.attacks_from(pos.piece_on(m1to), m1to, pos.occupied_squares ^ (ulong)m2from);
             if (Utils.bit_is_set(m1att, m2to) != 0)
             {
                 return true;

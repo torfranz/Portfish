@@ -242,15 +242,6 @@ namespace Portfish
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #endif
 
-        internal ulong pieces()
-        {
-            return this.byTypeBB[PieceTypeC.AllPieces];
-        }
-
-#if AGGR_INLINE
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-#endif
-
         internal ulong pieces_PT(int pt)
         {
             return this.byTypeBB[pt];
@@ -1539,24 +1530,33 @@ namespace Portfish
             this.st.rule50++;
             this.st.pliesFromNull++;
 
-            if (Utils.type_of_move(m) == MoveTypeC.CASTLING)
-            {
-                this.st.key = k;
-                this.do_castle_move(true, m);
-                return;
-            }
-
             var us = this.sideToMove;
             var them = us ^ 1;
-            var from = ((m >> 6) & 0x3F);
-            var to = (m & 0x3F);
-            var piece = this.board[from];
-            var pt = (piece & 7);
-            var capture = Utils.type_of_move(m) == MoveTypeC.ENPASSANT ? PieceTypeC.PAWN : (this.board[to] & 7);
+            Square from = Utils.from_sq(m);
+            Square to = Utils.to_sq(m);
+            Piece piece = piece_on(from);
+            PieceType pt = Utils.type_of(piece);
+            PieceType capture = Utils.type_of_move(m) == MoveTypeC.ENPASSANT ? PieceTypeC.PAWN : Utils.type_of(piece_on(to));
 
             Debug.Assert(Utils.color_of(piece) == us);
-            Debug.Assert(piece_on(to) == PieceC.NO_PIECE || Utils.color_of(piece_on(to)) == them);
+            Debug.Assert(piece_on(to) == PieceC.NO_PIECE || Utils.color_of(piece_on(to)) == them || Utils.type_of_move(m) == MoveTypeC.CASTLING);
             Debug.Assert(capture != PieceTypeC.KING);
+
+            if (Utils.type_of_move(m) == MoveTypeC.CASTLING)
+            {
+                Debug.Assert(piece == Utils.make_piece(us, PieceTypeC.KING));
+                
+                bool kingSide = to > from;
+                Square rfrom = to; // Castle is encoded as "king captures friendly rook"
+                Square rto = Utils.relative_square(us, kingSide ? SquareC.SQ_F1 : SquareC.SQ_D1);
+                to = Utils.relative_square(us, kingSide ? SquareC.SQ_G1 : SquareC.SQ_C1);
+                capture = PieceTypeC.NO_PIECE_TYPE;
+                
+                do_castle(from, to, rfrom, rto);
+                
+                st.psqScore += psq_delta(Utils.make_piece(us, PieceTypeC.ROOK), rfrom, rto);
+                k ^= Zobrist.psq[us][PieceTypeC.ROOK][rfrom] ^ Zobrist.psq[us][PieceTypeC.ROOK][rto];
+            }
 
             if (capture != 0)
             {
@@ -1642,19 +1642,22 @@ namespace Portfish
                 this.st.castleRights &= ~cr;
             }
 
-            // Move the piece
-            var from_to_bb = Utils.SquareBB[from] ^ Utils.SquareBB[to];
-            this.occupied_squares ^= from_to_bb;
-            this.byTypeBB[pt] ^= from_to_bb;
-            this.byColorBB[us] ^= from_to_bb;
-
-            this.board[to] = this.board[from];
-            this.board[from] = PieceC.NO_PIECE;
-
-            // Update piece lists, index[from] is not updated and becomes stale. This
-            // works as long as index[] is accessed just by known occupied squares.
-            this.index[to] = this.index[from];
-            this.pieceList[us][pt][this.index[to]] = to;
+            // Move the piece. The tricky Chess960 castle is handled earlier
+            if (Utils.type_of_move(m) != MoveTypeC.CASTLING)
+            {
+                Bitboard from_to_bb = Utils.SquareBB[from] ^ Utils.SquareBB[to];
+                occupied_squares ^= from_to_bb;
+                byTypeBB[pt] ^= from_to_bb;
+                byColorBB[us] ^= from_to_bb;
+                
+                board[from] = PieceC.NO_PIECE;
+                board[to] = piece;
+                
+                      // Update piece lists, index[from] is not updated and becomes stale. This
+                      // works as long as index[] is accessed just by known occupied squares.
+                index[to] = index[from];
+                pieceList[us][pt][index[to]] = to;
+            }
 
             // If the moving piece is a pawn do some special extra work
             if (pt == PieceTypeC.PAWN)
@@ -1780,22 +1783,14 @@ namespace Portfish
 
             this.sideToMove = this.sideToMove ^ 1;
 
-            if (Utils.type_of_move(m) == MoveTypeC.CASTLING)
-            {
-                this.do_castle_move(false, m);
-                return;
-            }
-
             var us = this.sideToMove;
             var them = us ^ 1;
             var from = ((m >> 6) & 0x3F);
             var to = (m & 0x3F);
-            var piece = this.board[to];
-            var pt = piece & 7;
+            var pt = Utils.type_of(piece_on(to));
             var capture = this.st.capturedType;
 
-            Debug.Assert(this.is_empty(from));
-            Debug.Assert(Utils.color_of(piece) == us);
+            Debug.Assert(this.is_empty(from) || Utils.type_of_move(m) == MoveTypeC.CASTLING);
             Debug.Assert(capture != PieceTypeC.KING);
 
             if (Utils.type_of_move(m) == MoveTypeC.PROMOTION)
@@ -1824,19 +1819,32 @@ namespace Portfish
                 pt = PieceTypeC.PAWN;
             }
 
-            // Put the piece back at the source square
-            var from_to_bb = Utils.SquareBB[from] ^ Utils.SquareBB[to];
-            this.occupied_squares ^= from_to_bb;
-            this.byTypeBB[pt] ^= from_to_bb;
-            this.byColorBB[us] ^= from_to_bb;
-
-            this.board[from] = this.board[to];
-            this.board[to] = PieceC.NO_PIECE;
-
-            // Update piece lists, index[to] is not updated and becomes stale. This
-            // works as long as index[] is accessed just by known occupied squares.
-            this.index[from] = this.index[to];
-            this.pieceList[us][pt][this.index[from]] = from;
+            if (Utils.type_of_move(m) == MoveTypeC.CASTLING)
+            {
+                bool kingSide = to > from;
+                Square rfrom = to; // Castle is encoded as "king captures friendly rook"
+                Square rto = Utils.relative_square(us, kingSide ? SquareC.SQ_F1 : SquareC.SQ_D1);
+                to = Utils.relative_square(us, kingSide ? SquareC.SQ_G1 : SquareC.SQ_C1);
+                capture = PieceTypeC.NO_PIECE_TYPE;
+                pt = PieceTypeC.KING;
+                do_castle(to, from, rto, rfrom);
+            }
+            else
+            {
+                // Put the piece back at the source square
+                Bitboard from_to_bb = Utils.SquareBB[from] ^ Utils.SquareBB[to];
+                occupied_squares ^= from_to_bb;
+                byTypeBB[pt] ^= from_to_bb;
+                byColorBB[us] ^= from_to_bb;
+                
+                board[to] = PieceC.NO_PIECE;
+                board[from] = Utils.make_piece(us, pt);
+                
+                // Update piece lists, index[to] is not updated and becomes stale. This
+                // works as long as index[] is accessed just by known occupied squares.
+                index[from] = index[to];
+                pieceList[us][pt][index[from]] = from;
+            }
 
             if (capture != 0)
             {
@@ -1870,37 +1878,12 @@ namespace Portfish
             Debug.Assert(this.pos_is_ok());
         }
 
-        /// do_castle_move() is a private method used to do/undo a castling
-        /// move. Note that castling moves are encoded as "king captures friendly rook"
-        /// moves, for instance white short castling in a non-Chess960 game is encoded
-        /// as e1h1.
-        internal void do_castle_move(bool Do, int m)
+        // Position::do_castle() is a helper used to do/undo a castling move. This
+        // is a bit tricky, especially in Chess960.
+        internal void do_castle(Square kfrom, Square kto, Square rfrom, Square rto)
         {
-            Debug.Assert(Utils.is_ok_M(m));
-            Debug.Assert(Utils.type_of_move(m) == MoveTypeC.CASTLING);
-
             var us = this.sideToMove;
-            Square kfrom, kto, rfrom, rto;
             
-            bool kingSide = Utils.to_sq(m) > Utils.from_sq(m);
-            kfrom = kto = Utils.from_sq(m);
-            rfrom = rto = Utils.to_sq(m);
-
-            if (Do) // O-O
-            {
-                kto = Utils.relative_square(us, kingSide ? SquareC.SQ_G1 : SquareC.SQ_C1);
-                rto = Utils.relative_square(us, kingSide ? SquareC.SQ_F1 : SquareC.SQ_D1);
-            }
-            else
-            {
-                kfrom = Utils.relative_square(us, kingSide ? SquareC.SQ_G1 : SquareC.SQ_C1);
-                rfrom = Utils.relative_square(us, kingSide ? SquareC.SQ_F1 : SquareC.SQ_D1);
-            }
-            
-            Debug.Assert(this.piece_on(kfrom) == Utils.make_piece(us, PieceTypeC.KING));
-            Debug.Assert(this.piece_on(rfrom) == Utils.make_piece(us, PieceTypeC.ROOK));
-
-            // Move the pieces, with some care; in chess960 could be kto == rfrom
             var k_from_to_bb = Utils.SquareBB[kfrom] ^ Utils.SquareBB[kto];
             var r_from_to_bb = Utils.SquareBB[rfrom] ^ Utils.SquareBB[rto];
             this.byTypeBB[PieceTypeC.KING] ^= k_from_to_bb;
@@ -1908,55 +1891,17 @@ namespace Portfish
             this.occupied_squares ^= k_from_to_bb ^ r_from_to_bb;
             this.byColorBB[us] ^= k_from_to_bb ^ r_from_to_bb;
 
-            // Update board
+            // Could be from == to, so first set NO_PIECE then KING and ROOK
             this.board[kfrom] = this.board[rfrom] = PieceC.NO_PIECE;
             this.board[kto] = Utils.make_piece(us, PieceTypeC.KING);
             this.board[rto] = Utils.make_piece(us, PieceTypeC.ROOK);
 
-            // Update piece lists
-            this.pieceList[us][PieceTypeC.KING][this.index[kfrom]] = kto;
-            this.pieceList[us][PieceTypeC.ROOK][this.index[rfrom]] = rto;
-            var tmp = this.index[rfrom]; // In Chess960 could be kto == rfrom
-            this.index[kto] = this.index[kfrom];
-            this.index[rto] = tmp;
-
-            if (Do)
-            {
-                // Reset capture field
-                this.st.capturedType = PieceTypeC.NO_PIECE_TYPE;
-
-                // Update incremental scores
-                this.st.psqScore += psq_delta(Utils.make_piece(us, PieceTypeC.KING), kfrom, kto);
-                this.st.psqScore += psq_delta(Utils.make_piece(us, PieceTypeC.ROOK), rfrom, rto);
-
-                // Update hash key
-                this.st.key ^= Zobrist.psq[us][PieceTypeC.KING][kfrom] ^ Zobrist.psq[us][PieceTypeC.KING][kto];
-                this.st.key ^= Zobrist.psq[us][PieceTypeC.ROOK][rfrom] ^ Zobrist.psq[us][PieceTypeC.ROOK][rto];
-
-                // Clear en passant square
-                if (this.st.epSquare != SquareC.SQ_NONE)
-                {
-                    this.st.key ^= Zobrist.enpassant[Utils.file_of(this.st.epSquare)];
-                    this.st.epSquare = SquareC.SQ_NONE;
-                }
-
-                // Update castling rights
-                this.st.key ^= Zobrist.castle[this.st.castleRights & this.castleRightsMask[kfrom]];
-                this.st.castleRights &= ~this.castleRightsMask[kfrom];
-
-                // Update checkers BB
-                this.st.checkersBB = this.attackers_to(this.king_square(Utils.flip_C(us))) & this.pieces_C(us);
-
-                // Finish
-                this.sideToMove = Utils.flip_C(this.sideToMove);
-            }
-            else
-            {
-                // Undo: point our state pointer back to the previous state
-                this.st = this.st.previous;
-            }
-
-            Debug.Assert(this.pos_is_ok());
+            // Could be kfrom == rto, so use a 'tmp' variable
+            int tmp = index[kfrom];
+            index[rto] = index[rfrom];
+            index[kto] = tmp;
+            pieceList[us][PieceTypeC.KING][index[kto]] = kto;
+            pieceList[us][PieceTypeC.ROOK][index[rto]] = rto;
         }
 
         internal void undo_null_move(StateInfo backupSt)
