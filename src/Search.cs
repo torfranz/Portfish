@@ -1004,14 +1004,14 @@ namespace Portfish
                 {
                     st = StateInfoBroker.GetObject();
                 }
-                pos.do_null_move(true, st);
+                pos.do_null_move(st);
                 ss[ssPos + 1].skipNullMove = 1;
                 
                 nullValue = depth - R < DepthC.ONE_PLY ? -qsearch(NodeTypeC.NonPV, false, pos, ss, ssPos + 1, -beta, -alpha, DepthC.DEPTH_ZERO)
                                       : -search(NodeTypeC.NonPV, pos, ss, ssPos + 1, -beta, -alpha, depth - R);
 
                 ss[ssPos + 1].skipNullMove = 0;
-                pos.do_null_move(false, st);
+                pos.undo_null_move(st);
 
                 if (nullValue >= beta)
                 {

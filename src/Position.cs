@@ -1909,11 +1909,9 @@ namespace Portfish
             this.byColorBB[us] ^= k_from_to_bb ^ r_from_to_bb;
 
             // Update board
-            var king = Utils.make_piece(us, PieceTypeC.KING);
-            var rook = Utils.make_piece(us, PieceTypeC.ROOK);
             this.board[kfrom] = this.board[rfrom] = PieceC.NO_PIECE;
-            this.board[kto] = king;
-            this.board[rto] = rook;
+            this.board[kto] = Utils.make_piece(us, PieceTypeC.KING);
+            this.board[rto] = Utils.make_piece(us, PieceTypeC.ROOK);
 
             // Update piece lists
             this.pieceList[us][PieceTypeC.KING][this.index[kfrom]] = kto;
@@ -1928,8 +1926,8 @@ namespace Portfish
                 this.st.capturedType = PieceTypeC.NO_PIECE_TYPE;
 
                 // Update incremental scores
-                this.st.psqScore += psq_delta(king, kfrom, kto);
-                this.st.psqScore += psq_delta(rook, rfrom, rto);
+                this.st.psqScore += psq_delta(Utils.make_piece(us, PieceTypeC.KING), kfrom, kto);
+                this.st.psqScore += psq_delta(Utils.make_piece(us, PieceTypeC.ROOK), rfrom, rto);
 
                 // Update hash key
                 this.st.key ^= Zobrist.psq[us][PieceTypeC.KING][kfrom] ^ Zobrist.psq[us][PieceTypeC.KING][kto];
@@ -1961,39 +1959,48 @@ namespace Portfish
             Debug.Assert(this.pos_is_ok());
         }
 
-        /// do_null_move() is used to do/undo a "null move": It flips the side
-        /// to move and updates the hash key without executing any move on the board.
-        internal void do_null_move(bool Do, StateInfo backupSt)
+        internal void undo_null_move(StateInfo backupSt)
+        {
+            Debug.Assert(!this.in_check());
+            
+            st = st.previous;
+            this.sideToMove = Utils.flip_C(this.sideToMove);
+        }
+
+        // Position::do(undo)_null_move() is used to do(undo) a "null move": It flips
+        // the side to move without executing any move on the board.
+        internal void do_null_move(StateInfo newSt)
         {
             Debug.Assert(!this.in_check());
 
-            // Back up the information necessary to undo the null move to the supplied
-            // StateInfo object. Note that differently from normal case here backupSt
-            // is actually used as a backup storage not as the new state. This reduces
-            // the number of fields to be copied.
-            var src = Do ? this.st : backupSt;
-            var dst = Do ? backupSt : this.st;
+            newSt.capturedType = st.capturedType;
+            newSt.castleRights = st.castleRights;
+            newSt.rule50 = st.rule50;
+            newSt.pliesFromNull = st.pliesFromNull;
+            newSt.checkersBB = st.checkersBB;
+            newSt.epSquare = st.epSquare;
+            newSt.key = st.key;
+            newSt.npMaterialWHITE = st.npMaterialWHITE;
+            newSt.npMaterialBLACK = st.npMaterialBLACK;
+            newSt.pawnKey = st.pawnKey;
+            newSt.materialKey = st.materialKey;
+            newSt.psqScore = st.psqScore;
+            
+            newSt.previous = st;
+            st = newSt;
 
-            dst.key = src.key;
-            dst.epSquare = src.epSquare;
-            dst.psqScore = src.psqScore;
-            dst.rule50 = src.rule50;
-            dst.pliesFromNull = src.pliesFromNull;
+            if (this.st.epSquare != SquareC.SQ_NONE)
+            {
+                this.st.key ^= Zobrist.enpassant[Utils.file_of(this.st.epSquare)];
+                this.st.epSquare = SquareC.SQ_NONE;
+            }
+
+            st.key ^= Zobrist.side;
+            st.rule50++;
+            st.pliesFromNull = 0;
 
             this.sideToMove = Utils.flip_C(this.sideToMove);
 
-            if (Do)
-            {
-                if (this.st.epSquare != SquareC.SQ_NONE)
-                {
-                    this.st.key ^= Zobrist.enpassant[Utils.file_of(this.st.epSquare)];
-                }
-
-                this.st.key ^= Zobrist.side;
-                this.st.epSquare = SquareC.SQ_NONE;
-                this.st.rule50++;
-                this.st.pliesFromNull = 0;
-            }
             Debug.Assert(this.pos_is_ok());
         }
 
