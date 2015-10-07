@@ -306,10 +306,14 @@ namespace Portfish
                 var m = this.ms[idx].move;
                 this.ms[idx].score = Position.PieceValue[PhaseC.MG][this.pos.board[m & 0x3F]]
                                      - (this.pos.board[((m >> 6) & 0x3F)] & 7);
-                //if ((m & (3 << 14)) == (1 << 14))
+                
                 if (Utils.type_of_move(m) == MoveTypeC.PROMOTION)
                 {
-                    this.ms[idx].score += Position.PieceValue[PhaseC.MG][(((m >> 12) & 3) + 2)];
+                    this.ms[idx].score += Position.PieceValue[PhaseC.MG][Utils.promotion_type(m)] - Position.PieceValue[PhaseC.MG][PieceTypeC.PAWN];
+                }
+                else if (Utils.type_of_move(m) == MoveTypeC.ENPASSANT)
+                {
+                    this.ms[idx].score += Position.PieceValue[PhaseC.MG][PieceTypeC.PAWN];
                 }
             }
         }
