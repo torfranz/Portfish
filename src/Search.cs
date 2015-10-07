@@ -1059,7 +1059,7 @@ namespace Portfish
                     threatMove = ss[ssPos + 1].currentMove;
 
                     if (depth < 5 * DepthC.ONE_PLY && (ss[ssPos - 1].reduction != 0) && threatMove != MoveC.MOVE_NONE
-                        && allows_move(pos, ss[ssPos - 1].currentMove, threatMove))
+                        && allows(pos, ss[ssPos - 1].currentMove, threatMove))
                     {
                         //threatExtension = true;
                         
@@ -1240,7 +1240,7 @@ namespace Portfish
                 {
                     ext = DepthC.ONE_PLY;
                 }
-                // else if (threatExtension && prevents_move(pos, move, threatMove))
+                // else if (threatExtension && refutes(pos, move, threatMove))
                 // {
                 // ext = DepthC.ONE_PLY;
                 // }
@@ -1284,7 +1284,7 @@ namespace Portfish
                     // Move count based pruning
                     if (depth < 16 * DepthC.ONE_PLY
                         && moveCount >= FutilityMoveCounts[depth]
-                        && ((threatMove == 0) || !prevents_move(pos, move, threatMove)))
+                        && ((threatMove == 0) || !refutes(pos, move, threatMove)))
                     {
                         if (SpNode)
                         {
@@ -1913,11 +1913,11 @@ namespace Portfish
             return false;
         }
 
-        // allows_move() tests whether the move at previous ply(first) somehow makes a
-        // second move possible, for instance if the moving piece is the same in both
-        // moves. Normally the second move is the threat move (the best move returned
+        // allows() tests whether the 'first' move at previous ply somehow makes the
+        // 'second' move possible, for instance if the moving piece is the same in
+        // both moves. Normally the second move is the threat (the best move returned
         // from a null search that fails low).
-        internal static bool allows_move(Position pos, int first, int second)
+        internal static bool allows(Position pos, int first, int second)
         {
             Debug.Assert(Utils.is_ok_M(first));
             Debug.Assert(Utils.is_ok_M(second));
@@ -1988,10 +1988,10 @@ namespace Portfish
                  : v <= ValueC.VALUE_MATED_IN_MAX_PLY ? v + ply : v;
         }
 
-        // prevents_threat() tests whether a move is able to defend against the so
-        // called threat move (the best move returned from a null search that fails
-        // low). In this case will not be pruned.
-        private static bool prevents_move(Position pos, int move, int threat)
+        // refutes() tests whether a 'first' move is able to defend against a 'second'
+        // opponent's move. In this case will not be pruned. Normally the second move
+        // is the threat (the best move returned from a null search that fails low).
+        private static bool refutes(Position pos, int move, int threat)
         {
             Debug.Assert(Utils.is_ok_M(move));
             Debug.Assert(Utils.is_ok_M(threat));

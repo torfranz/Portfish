@@ -752,15 +752,20 @@ namespace Portfish
 
                     // Add a bonus if a slider is pinning an enemy piece
                     if ((Piece == PieceTypeC.BISHOP || Piece == PieceTypeC.ROOK || Piece == PieceTypeC.QUEEN)
-                                && ((Utils.PseudoAttacks[Piece][pos.king_square(Them)] & (ulong)s) != 0))
+                        && ((Utils.PseudoAttacks[Piece][pos.pieceList[Them][PieceTypeC.KING][0]] & Utils.SquareBB[s])
+                            != 0))
                     {
-                        b = Utils.BetweenBB[s][pos.king_square(Them)] & pos.occupied_squares;
-                        
+                        b = Utils.BetweenBB[s][pos.pieceList[Them][PieceTypeC.KING][0]] & pos.occupied_squares;
+
                         Debug.Assert(b != 0);
 
-                        if (!Utils.more_than_one(b) && ((b & pos.pieces_C(Them)) !=0))
+                        if (((b & (b - 1)) == 0) && ((b & pos.byColorBB[Them]) != 0))
                         {
-                            score += ThreatBonus[Piece][Utils.type_of(pos.piece_on(Utils.lsb(b)))];
+#if X64
+                            score += ThreatBonus[Piece][pos.board[Utils.BSFTable[((b & (0xffffffffffffffff - b + 1)) * DeBruijn_64) >> 58]] & 7];
+#else
+                            score += ThreatBonus[Piece][pos.board[Utils.lsb(b)] & 7];
+#endif
                         }
                     }
 
