@@ -1346,8 +1346,12 @@ namespace Portfish
 
                 // Step 15. Reduced depth search (LMR). If the move fails high will be
                 // re-searched at full depth.
-                if (!pvMove && !captureOrPromotion && !dangerous && ss[ssPos].killers0 != move
-                    && ss[ssPos].killers1 != move && depth > 3 * DepthC.ONE_PLY)
+                if (!pvMove 
+                    && !captureOrPromotion 
+                    && !dangerous
+                    && move != ttMove
+                    && move != ss[ssPos].killers0
+                    && move != ss[ssPos].killers1)
                 {
                     ss[ssPos].reduction = reduction(PvNode, depth, moveCount);
                     var d = Math.Max(newDepth - ss[ssPos].reduction, DepthC.ONE_PLY);
