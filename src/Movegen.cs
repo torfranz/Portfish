@@ -285,29 +285,7 @@ namespace Portfish
             }
         }
 
-        private static void generate_king_moves(
-            Position pos,
-            MoveStack[] mlist,
-            ref int mpos,
-            int us,
-            ulong target)
-        {
-            Square from = pos.king_square(us);
-            Bitboard b = Position.attacks_from_KING(from) & target;
-            // SERIALIZE(b);
-            while (b != 0)
-            {
-#if X64
-                Bitboard bb = b;
-                b &= (b - 1);
-                mlist[mpos++].move = ((Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * DeBruijn_64) >> 58]) | (from << 6));
-#else
-                mlist[mpos++].move = Utils.make_move(from, Utils.pop_lsb(ref b));
-#endif
-            }
-        }
-
-        private static void generate_all_moves(
+        private static void generate_all(
             GenType type,
             Position pos,
             MoveStack[] mlist,
@@ -316,22 +294,36 @@ namespace Portfish
             ulong target,
             CheckInfo ci)
         {
+            var Checks = type == GenType.QUIET_CHECKS;
+
             generate_pawn_moves(us, type, pos, mlist, ref mpos, target, ci);
 
-            generate_moves(PieceTypeC.KNIGHT, type == GenType.QUIET_CHECKS, pos, mlist, ref mpos, us, target, ci);
-            generate_moves(PieceTypeC.BISHOP, type == GenType.QUIET_CHECKS, pos, mlist, ref mpos, us, target, ci);
-            generate_moves(PieceTypeC.ROOK, type == GenType.QUIET_CHECKS, pos, mlist, ref mpos, us, target, ci);
-            generate_moves(PieceTypeC.QUEEN, type == GenType.QUIET_CHECKS, pos, mlist, ref mpos, us, target, ci);
+            generate_moves(PieceTypeC.KNIGHT, Checks, pos, mlist, ref mpos, us, target, ci);
+            generate_moves(PieceTypeC.BISHOP, Checks, pos, mlist, ref mpos, us, target, ci);
+            generate_moves(PieceTypeC.ROOK, Checks, pos, mlist, ref mpos, us, target, ci);
+            generate_moves(PieceTypeC.QUEEN, Checks, pos, mlist, ref mpos, us, target, ci);
 
-            if (type != GenType.QUIET_CHECKS && type != GenType.EVASIONS)
+            if (!Checks && type != GenType.EVASIONS)
             {
-                generate_king_moves(pos, mlist, ref mpos, us, target);
+                Square from = pos.king_square(us);
+                Bitboard b = Position.attacks_from_KING(from) & target;
+                // SERIALIZE(b);
+                while (b != 0)
+                {
+#if X64
+                    Bitboard bb = b;
+                    b &= (b - 1);
+                 mlist[mpos++].move = ((Utils.BSFTable[((bb & (0xffffffffffffffff - bb + 1)) * DeBruijn_64) >> 58]) | (from << 6));
+#else
+                    mlist[mpos++].move = Utils.make_move(from, Utils.pop_lsb(ref b));
+#endif
+                }
             }
             
             if (type != GenType.CAPTURES && type != GenType.EVASIONS && pos.can_castle_C(us) != 0)
             {
-                generate_castle(CastlingSideC.KING_SIDE, type == GenType.QUIET_CHECKS, pos, mlist, ref mpos, us);
-                generate_castle(CastlingSideC.QUEEN_SIDE, type == GenType.QUIET_CHECKS, pos, mlist, ref mpos, us);
+                generate_castle(CastlingSideC.KING_SIDE, Checks, pos, mlist, ref mpos, us);
+                generate_castle(CastlingSideC.QUEEN_SIDE, Checks, pos, mlist, ref mpos, us);
             }
         }
 
@@ -490,7 +482,7 @@ namespace Portfish
             // Blocking evasions or captures of the checking piece
             var target = Utils.between_bb(checksq, ksq) | checkers;
 
-            generate_all_moves(GenType.EVASIONS, pos, ms, ref mpos, us, target, null);
+            generate_all(GenType.EVASIONS, pos, ms, ref mpos, us, target, null);
         }
 
         internal static void generate_quiet_check(Position pos, MoveStack[] ms, ref int mpos)
@@ -499,7 +491,6 @@ namespace Portfish
             /// underpromotions that give check. Returns a pointer to the end of the move list.
             Debug.Assert(!pos.in_check());
 
-            var us = pos.sideToMove;
             var ci = CheckInfoBroker.GetObject();
             ci.CreateCheckInfo(pos);
             var target = ~pos.occupied_squares;
@@ -528,7 +519,7 @@ namespace Portfish
                 }
             }
 
-            generate_all_moves(GenType.QUIET_CHECKS, pos, ms, ref mpos, us, target, ci);
+            generate_all(GenType.QUIET_CHECKS, pos, ms, ref mpos, pos.sideToMove, target, ci);
 
             CheckInfoBroker.Free();
         }
@@ -540,7 +531,7 @@ namespace Portfish
             var us = pos.sideToMove;
             var target = ~pos.occupied_squares;
 
-            generate_all_moves(GenType.QUIETS, pos, ms, ref mpos, us, target, null);
+            generate_all(GenType.QUIETS, pos, ms, ref mpos, us, target, null);
         }
 
         internal static void generate_non_evasion(Position pos, MoveStack[] ms, ref int mpos)
@@ -550,7 +541,7 @@ namespace Portfish
             var us = pos.sideToMove;
             var target = ~(pos.byColorBB[us]);
 
-            generate_all_moves(GenType.NON_EVASIONS, pos, ms, ref mpos, us, target, null);
+            generate_all(GenType.NON_EVASIONS, pos, ms, ref mpos, us, target, null);
         }
 
         internal static void generate_capture(Position pos, MoveStack[] ms, ref int mpos)
@@ -560,7 +551,7 @@ namespace Portfish
             var us = pos.sideToMove;
             var target = pos.byColorBB[us ^ 1];
 
-            generate_all_moves(GenType.CAPTURES, pos, ms, ref mpos, us, target, null);
+            generate_all(GenType.CAPTURES, pos, ms, ref mpos, us, target, null);
         }
     }
 }
