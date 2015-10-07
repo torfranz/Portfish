@@ -750,25 +750,15 @@ namespace Portfish
 #endif
                     mobility += MobilityBonus[Piece][mob];
 
-                    // Add a bonus if a slider is pinning an enemy piece
-                    if ((Piece == PieceTypeC.BISHOP || Piece == PieceTypeC.ROOK || Piece == PieceTypeC.QUEEN)
-                        && ((Utils.PseudoAttacks[Piece][pos.pieceList[Them][PieceTypeC.KING][0]] & Utils.SquareBB[s])
-                            != 0))
+                    if (Piece == PieceTypeC.BISHOP && ((Utils.PseudoAttacks[Piece][pos.king_square(Them)] & (ulong)s) != 0))
                     {
-                        b = Utils.BetweenBB[s][pos.pieceList[Them][PieceTypeC.KING][0]] & pos.occupied_squares;
-
-                        Debug.Assert(b != 0);
-
-                        if (((b & (b - 1)) == 0) && ((b & pos.byColorBB[Them]) != 0))
+                        var between = Utils.BetweenBB[s][pos.king_square(Them)] & pos.pieces();
+                        if (!Utils.more_than_one(between))
                         {
-#if X64
-                            score += ThreatBonus[Piece][pos.board[Utils.BSFTable[((b & (0xffffffffffffffff - b + 1)) * DeBruijn_64) >> 58]] & 7];
-#else
-                            score += ThreatBonus[Piece][pos.board[Utils.lsb(b)] & 7];
-#endif
+                            score += Utils.make_score(25, 25);
                         }
                     }
-
+                    
                     // Decrease score if we are attacked by an enemy pawn. Remaining part
                     // of threat evaluation must be done later when we have full attack info.
                     if ((attackedByThemPawn & Utils.SquareBB[s]) != 0)
