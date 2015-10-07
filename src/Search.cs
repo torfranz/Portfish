@@ -132,7 +132,7 @@ namespace Portfish
                     && pos.is_pseudo_legal(m = tte.move()) // Local copy, TT could change
                     && pos.pl_move_is_legal(m, pos.pinned_pieces())
                     && ply < Constants.MAX_PLY
-                    && (!pos.is_draw(true, true) || ply < 2));
+                    && (!pos.is_draw(false) || ply < 2));
             ;
             
             this.pv.Add(MoveC.MOVE_NONE); // Must be zero-terminating
@@ -854,7 +854,7 @@ namespace Portfish
             if (!RootNode)
             {
                 // Step 2. Check for aborted search and immediate draw
-                if ((SignalsStop || pos.is_draw(true, PvNode) || ss[ssPos].ply > Constants.MAX_PLY))
+                if ((SignalsStop || pos.is_draw(false) || ss[ssPos].ply > Constants.MAX_PLY))
                 {
                     MovesSearchedBroker.Free();
                     return DrawValue[pos.sideToMove];
@@ -1607,7 +1607,7 @@ namespace Portfish
             fromNull = ss[ssPos - 1].currentMove == MoveC.MOVE_NULL;
 
             // Check for an instant draw or maximum ply reached
-            if (pos.is_draw(false, false) || ss[ssPos].ply > Constants.MAX_PLY)
+            if (pos.is_draw(true) || ss[ssPos].ply > Constants.MAX_PLY)
             {
                 return DrawValue[pos.sideToMove];
             }
