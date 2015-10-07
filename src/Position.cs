@@ -1879,30 +1879,24 @@ namespace Portfish
             Debug.Assert(Utils.is_ok_M(m));
             Debug.Assert(Utils.type_of_move(m) == MoveTypeC.CASTLING);
 
-            int kto, kfrom, rfrom, rto, kAfter, rAfter;
-
             var us = this.sideToMove;
-            var kBefore = Utils.from_sq(m);
-            var rBefore = Utils.to_sq(m);
+            Square kfrom, kto, rfrom, rto;
+            
+            bool kingSide = Utils.to_sq(m) > Utils.from_sq(m);
+            kfrom = kto = Utils.from_sq(m);
+            rfrom = rto = Utils.to_sq(m);
 
-            // Find after-castle squares for king and rook
-            if (rBefore > kBefore) // O-O
+            if (Do) // O-O
             {
-                kAfter = Utils.relative_square(us, SquareC.SQ_G1);
-                rAfter = Utils.relative_square(us, SquareC.SQ_F1);
+                kto = Utils.relative_square(us, kingSide ? SquareC.SQ_G1 : SquareC.SQ_C1);
+                rto = Utils.relative_square(us, kingSide ? SquareC.SQ_F1 : SquareC.SQ_D1);
             }
-            else // O-O-O
+            else
             {
-                kAfter = Utils.relative_square(us, SquareC.SQ_C1);
-                rAfter = Utils.relative_square(us, SquareC.SQ_D1);
+                kfrom = Utils.relative_square(us, kingSide ? SquareC.SQ_G1 : SquareC.SQ_C1);
+                rfrom = Utils.relative_square(us, kingSide ? SquareC.SQ_F1 : SquareC.SQ_D1);
             }
-
-            kfrom = Do ? kBefore : kAfter;
-            rfrom = Do ? rBefore : rAfter;
-
-            kto = Do ? kAfter : kBefore;
-            rto = Do ? rAfter : rBefore;
-
+            
             Debug.Assert(this.piece_on(kfrom) == Utils.make_piece(us, PieceTypeC.KING));
             Debug.Assert(this.piece_on(rfrom) == Utils.make_piece(us, PieceTypeC.ROOK));
 
