@@ -604,7 +604,7 @@ namespace Portfish
 
             if (undefendedMinors != 0)
             {
-                score += ((undefendedMinors & (undefendedMinors - 1)) != 0)
+                score += (Utils.more_than_one(undefendedMinors))
                              ? UndefendedMinorPenalty * 2
                              : UndefendedMinorPenalty;
             }
@@ -750,15 +750,20 @@ namespace Portfish
 #endif
                     mobility += MobilityBonus[Piece][mob];
 
-                    if (Piece == PieceTypeC.BISHOP && ((Utils.PseudoAttacks[Piece][pos.king_square(Them)] & (ulong)s) != 0))
+                    // Add a bonus if a slider is pinning an enemy piece
+                    if ((Piece == PieceTypeC.BISHOP || Piece == PieceTypeC.ROOK || Piece == PieceTypeC.QUEEN)
+                                && ((Utils.PseudoAttacks[Piece][pos.king_square(Them)] & (ulong)s) != 0))
                     {
-                        var between = Utils.BetweenBB[s][pos.king_square(Them)] & pos.occupied_squares;
-                        if (!Utils.more_than_one(between))
+                        b = Utils.BetweenBB[s][pos.king_square(Them)] & pos.occupied_squares;
+                        
+                        Debug.Assert(b != 0);
+
+                        if (!Utils.more_than_one(b) && ((b & pos.pieces_C(Them)) !=0))
                         {
-                            score += Utils.make_score(25, 25);
+                            score += ThreatBonus[Piece][Utils.type_of(pos.piece_on(Utils.lsb(b)))];
                         }
                     }
-                    
+
                     // Decrease score if we are attacked by an enemy pawn. Remaining part
                     // of threat evaluation must be done later when we have full attack info.
                     if ((attackedByThemPawn & Utils.SquareBB[s]) != 0)
