@@ -650,7 +650,7 @@ namespace Portfish
 
             #region Evaluate pieces
 
-            ulong b = 0;
+            ulong between = 0;
             var plPos = 0;
             int s, ksq;
             int mob;
@@ -672,14 +672,14 @@ namespace Portfish
                     // Find attacked squares, including x-ray attacks for bishops and rooks
                     if (Piece == PieceTypeC.KNIGHT)
                     {
-                        b = Utils.StepAttacksBB_KNIGHT[s];
+                        between = Utils.StepAttacksBB_KNIGHT[s];
                     }
                     else if (Piece == PieceTypeC.QUEEN)
                     {
 #if X64
                         b = Utils.BAttacks[s][(((pos.occupied_squares & Utils.BMasks[s]) * Utils.BMagics[s]) >> Utils.BShifts[s])] | Utils.RAttacks[s][(((pos.occupied_squares & Utils.RMasks[s]) * Utils.RMagics[s]) >> Utils.RShifts[s])];
 #else
-                        b = Utils.bishop_attacks_bb(s, pos.occupied_squares)
+                        between = Utils.bishop_attacks_bb(s, pos.occupied_squares)
                             | Utils.rook_attacks_bb(s, pos.occupied_squares);
 #endif
                     }
@@ -690,7 +690,7 @@ namespace Portfish
                               (pos.occupied_squares ^ (pos.byTypeBB[PieceTypeC.QUEEN] & pos.byColorBB[Us]))
                             & Utils.BMasks[s]) * Utils.BMagics[s]) >> Utils.BShifts[s])];
 #else
-                        b = Utils.bishop_attacks_bb(s, pos.occupied_squares ^ pos.pieces_PTC(PieceTypeC.QUEEN, Us));
+                        between = Utils.bishop_attacks_bb(s, pos.occupied_squares ^ pos.pieces_PTC(PieceTypeC.QUEEN, Us));
 #endif
                     }
                     else if (Piece == PieceTypeC.ROOK)
@@ -700,21 +700,21 @@ namespace Portfish
                               (pos.occupied_squares ^ ((pos.byTypeBB[PieceTypeC.ROOK] | pos.byTypeBB[PieceTypeC.QUEEN]) & pos.byColorBB[Us]))
                             & Utils.RMasks[s]) * Utils.RMagics[s]) >> Utils.RShifts[s])];
 #else
-                        b = Utils.rook_attacks_bb(
+                        between = Utils.rook_attacks_bb(
                             s,
                             pos.occupied_squares ^ pos.pieces(PieceTypeC.ROOK, PieceTypeC.QUEEN, Us));
 #endif
                     }
 
                     // Update attack info
-                    ei.attackedBy[Us][Piece] |= b;
+                    ei.attackedBy[Us][Piece] |= between;
 
                     // King attacks
-                    if ((b & kingRingThem) != 0)
+                    if ((between & kingRingThem) != 0)
                     {
                         ei.kingAttackersCount[Us]++;
                         ei.kingAttackersWeight[Us] += KingAttackWeights[Piece];
-                        var bb = (b & attackedByThemKing); //ei.attackedBy[Them][PieceTypeC.KING]);
+                        var bb = (between & attackedByThemKing); //ei.attackedBy[Them][PieceTypeC.KING]);
                         if (bb != 0)
                         {
 #if X64
@@ -745,35 +745,27 @@ namespace Portfish
                     }
 #else
                     mob = (Piece != PieceTypeC.QUEEN
-                               ? Bitcount.popcount_1s_Max15(b & mobilityArea)
-                               : Bitcount.popcount_1s_Full(b & mobilityArea));
+                               ? Bitcount.popcount_1s_Max15(between & mobilityArea)
+                               : Bitcount.popcount_1s_Full(between & mobilityArea));
 #endif
                     mobility += MobilityBonus[Piece][mob];
-
-                    // Add a bonus if a slider is pinning an enemy piece
-                    if ((Piece == PieceTypeC.BISHOP || Piece == PieceTypeC.ROOK || Piece == PieceTypeC.QUEEN)
-                        && ((Utils.PseudoAttacks[Piece][pos.pieceList[Them][PieceTypeC.KING][0]] & Utils.SquareBB[s])
-                            != 0))
-                    {
-                        b = Utils.BetweenBB[s][pos.pieceList[Them][PieceTypeC.KING][0]] & pos.occupied_squares;
-
-                        Debug.Assert(b != 0);
-
-                        if (((b & (b - 1)) == 0) && ((b & pos.byColorBB[Them]) != 0))
-                        {
-#if X64
-                            score += ThreatBonus[Piece][pos.board[Utils.BSFTable[((b & (0xffffffffffffffff - b + 1)) * DeBruijn_64) >> 58]] & 7];
-#else
-                            score += ThreatBonus[Piece][pos.board[Utils.lsb(b)] & 7];
-#endif
-                        }
-                    }
 
                     // Decrease score if we are attacked by an enemy pawn. Remaining part
                     // of threat evaluation must be done later when we have full attack info.
                     if ((attackedByThemPawn & Utils.SquareBB[s]) != 0)
                     {
                         score -= ThreatenedByPawnPenalty[Piece];
+                    }
+                    else if ((Piece == PieceTypeC.BISHOP)
+                        && ((Utils.PseudoAttacks[Piece][pos.pieceList[Them][PieceTypeC.KING][0]] & Utils.SquareBB[s])
+                            != 0))
+                    {
+                        between = Utils.BetweenBB[s][pos.pieceList[Them][PieceTypeC.KING][0]] & pos.occupied_squares;
+
+                        if (!Utils.more_than_one(between))
+                        {
+                            score += Utils.make_score(15, 25);
+                        }
                     }
 
                     // Bishop and knight outposts squares
