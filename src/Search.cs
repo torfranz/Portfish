@@ -1481,14 +1481,14 @@ namespace Portfish
                 {
                     Debug.Assert(bestValue < beta);
 
-                    bestValue = Threads.split(
+                    Threads.split(
                         Constants.FakeSplit,
                         pos,
                         ss,
                         ssPos,
                         alpha,
                         beta,
-                        bestValue,
+                        ref bestValue,
                         ref bestMove,
                         depth,
                         threatMove,

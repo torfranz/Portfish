@@ -116,27 +116,27 @@ namespace Portfish
 
     internal class Thread
     {
-        internal readonly SplitPoint[] splitPoints = new SplitPoint[Constants.MAX_SPLITPOINTS_PER_THREAD];
-
         internal readonly MaterialTable materialTable = new MaterialTable();
 
         internal readonly PawnTable pawnTable = new PawnTable();
+
+        internal readonly object sleepCond = new object();
+
+        internal readonly object sleepLock = new object();
+
+        internal readonly SplitPoint[] splitPoints = new SplitPoint[Constants.MAX_SPLITPOINTS_PER_THREAD];
+
+        internal volatile SplitPoint activeSplitPoint;
+
+        internal volatile bool do_exit;
 
         internal int idx;
 
         internal int maxPly;
 
-        internal readonly object sleepLock = new object();
-
-        internal readonly object sleepCond = new object();
-
-        internal volatile SplitPoint activeSplitPoint;
-
-        internal volatile int splitPointsSize;
-
         internal volatile bool searching;
 
-        internal volatile bool do_exit;
+        internal volatile int splitPointsSize;
 
         internal Thread(ManualResetEvent initEvent)
         {
@@ -167,7 +167,7 @@ namespace Portfish
         internal void base_idle_loop(ManualResetEvent initEvent)
         {
             var this_sp = this.splitPointsSize > 0 ? this.activeSplitPoint : null;
-            Debug.Assert(this_sp  == null || (this_sp .master == this && this.searching));
+            Debug.Assert(this_sp == null || (this_sp.master == this && this.searching));
 
             if (initEvent != null)
             {
@@ -177,15 +177,15 @@ namespace Portfish
 
             // If this thread is the master of a split point and all slaves have
             // finished their work at this split point, return from the idle loop.
-            while ((this_sp  == null) || (this_sp .slavesMask != 0))
+            while ((this_sp == null) || (this_sp.slavesMask != 0))
             {
                 // If we are not searching, wait for a condition to be signaled
                 // instead of wasting CPU time polling for work.
-                while (do_exit || (!this.searching && Threads.sleepWhileIdle))
+                while (this.do_exit || (!this.searching && Threads.sleepWhileIdle))
                 {
                     if (this.do_exit)
                     {
-                        Debug.Assert(this_sp  == null);
+                        Debug.Assert(this_sp == null);
                         return;
                     }
 
@@ -193,7 +193,7 @@ namespace Portfish
                     ThreadHelper.lock_grab(this.sleepLock);
 
                     // If we are master and all slaves have finished don't go to sleep
-                    if ((this_sp  != null) && (this_sp .slavesMask == 0))
+                    if ((this_sp != null) && (this_sp.slavesMask == 0))
                     {
                         ThreadHelper.lock_release(this.sleepLock);
                         break;
@@ -203,7 +203,7 @@ namespace Portfish
                     // particular we need to avoid a deadlock in case a master thread has,
                     // in the meanwhile, allocated us and sent the notify_one() call before we
                     // had the chance to grab the lock.
-                    if (!this.searching && !do_exit)
+                    if (!this.searching && !this.do_exit)
                     {
                         ThreadHelper.cond_wait(this.sleepCond, this.sleepLock);
                     }
@@ -235,9 +235,9 @@ namespace Portfish
 
                     ThreadHelper.lock_grab(sp.Lock);
 
-                    Debug.Assert(sp.slavesPositions[idx] == null);
+                    Debug.Assert(sp.slavesPositions[this.idx] == null);
 
-                    sp.slavesPositions[idx] = pos;
+                    sp.slavesPositions[this.idx] = pos;
 
                     switch (sp.nodeType)
                     {
@@ -273,7 +273,7 @@ namespace Portfish
                     Debug.Assert(this.searching);
 
                     this.searching = false;
-                    sp.slavesPositions[idx] = null;
+                    sp.slavesPositions[this.idx] = null;
 #if ACTIVE_REPARENT
                     sp.allSlavesRunning = false;
 #endif
@@ -340,6 +340,7 @@ namespace Portfish
                 }
             }
         }
+
         /// Thread::idle_loop() is where the thread is parked when it has no work to do
         internal virtual void idle_loop(ManualResetEvent initEvent)
         {
@@ -356,7 +357,6 @@ namespace Portfish
 #if AGGR_INLINE
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #endif
-
         internal void notify_one()
         {
             ThreadHelper.lock_grab(this.sleepLock);
@@ -397,11 +397,10 @@ namespace Portfish
 
             // No active split points means that the thread is available as a slave for any
             // other thread otherwise apply the "helpful master" concept if possible.
-            return (size  == 0) || ((this.splitPoints[size  - 1].slavesMask & (1UL << master.idx)) != 0);
+            return (size == 0) || ((this.splitPoints[size - 1].slavesMask & (1UL << master.idx)) != 0);
         }
 
         #region Loops
-
 
         #endregion
     }
@@ -428,17 +427,17 @@ namespace Portfish
             while (!this.do_exit)
             {
                 ThreadHelper.lock_grab(this.sleepLock);
-                if (!do_exit)
-                { 
+                if (!this.do_exit)
+                {
                     ThreadHelper.cond_timedwait(
                         this.sleepCond,
                         this.sleepLock,
                         this.msec != 0 ? this.msec : Constants.INT_MAX);
                 }
-                
+
                 ThreadHelper.lock_release(this.sleepLock);
 
-                if (msec != 0)
+                if (this.msec != 0)
                 {
                     Search.check_time();
                 }
@@ -453,7 +452,7 @@ namespace Portfish
         internal MainThread(ManualResetEvent initEvent)
             : base(initEvent)
         {
-            thinking = true; // Avoid a race with start_thinking()
+            this.thinking = true; // Avoid a race with start_thinking()
         }
 
         // Thread::main_loop() is where the main thread is parked waiting to be started
@@ -474,7 +473,7 @@ namespace Portfish
             {
                 ThreadHelper.lock_grab(this.sleepLock);
 
-                this.thinking = false; 
+                this.thinking = false;
                 this.searching = false;
 
                 while (!this.thinking && !this.do_exit)
@@ -494,375 +493,368 @@ namespace Portfish
 
                 Search.think(); // This is the search entry point
 
-                Debug.Assert(searching);
-                searching = false;
+                Debug.Assert(this.searching);
+                this.searching = false;
             }
         }
-
     }
-    
+
     /// ThreadsManager class handles all the threads related stuff like init, starting,
-        /// parking and, the most important, launching a slave thread at a split point.
-        /// All the access to shared thread data is done through this class.
-        internal static class Threads
-        {
-            /* As long as the single ThreadsManager object is defined as a global we don't
+    /// parking and, the most important, launching a slave thread at a split point.
+    /// All the access to shared thread data is done through this class.
+    internal static class Threads
+    {
+        /* As long as the single ThreadsManager object is defined as a global we don't
            need to explicitly initialize to zero its data members because variables with
            static storage duration are automatically set to zero before enter main()
         */
 
-            internal static readonly List<Thread> threads = new List<Thread>();
+        internal static readonly List<Thread> threads = new List<Thread>();
 
-            internal static TimerThread timer;
+        internal static TimerThread timer;
 
-            internal static readonly object splitLock = new object();
+        internal static readonly object splitLock = new object();
 
-            internal static readonly object sleepCond = new object();
+        internal static readonly object sleepCond = new object();
 
-            internal static int minimumSplitDepth;
+        internal static int minimumSplitDepth;
 
-            internal static int maxThreadsPerSplitPoint;
+        internal static int maxThreadsPerSplitPoint;
 
-            internal static bool sleepWhileIdle;
+        internal static bool sleepWhileIdle;
 
-            //internal static bool use_sleeping_threads() { return useSleepingThreads; }
-            internal static int size()
+        //internal static bool use_sleeping_threads() { return useSleepingThreads; }
+        internal static int size()
+        {
+            return threads.Count;
+        }
+
+        internal static Thread thread(int index)
+        {
+            return threads[index];
+        }
+
+        internal static MainThread main_thread()
+        {
+            return (MainThread)threads[0];
+        }
+
+        internal static TimerThread timer_thread()
+        {
+            return timer;
+        }
+
+        // read_uci_options() updates internal threads parameters from the corresponding
+        // UCI options and creates/destroys threads to match the requested number. Thread
+        // objects are dynamically allocated to avoid creating in advance all possible
+        // threads, with included pawns and material tables, if only few are used.
+        internal static void read_uci_options(ManualResetEvent[] initEvents)
+        {
+            maxThreadsPerSplitPoint = int.Parse(OptionMap.Instance["Max Threads per Split Point"].v);
+            minimumSplitDepth = int.Parse(OptionMap.Instance["Min Split Depth"].v) * DepthC.ONE_PLY;
+
+            var requested = int.Parse(OptionMap.Instance["Threads"].v);
+            var current = 0;
+
+            Debug.Assert(requested > 0);
+
+            while (size() < requested)
             {
-                return threads.Count;
-            }
-
-            internal static Thread thread(int index)
-            {
-                return threads[index];
-            }
-
-            internal static MainThread main_thread()
-            {
-                return (MainThread)threads[0];
-            }
-
-            internal static TimerThread timer_thread()
-            {
-                return timer;
-            }
-
-            // read_uci_options() updates internal threads parameters from the corresponding
-            // UCI options and creates/destroys threads to match the requested number. Thread
-            // objects are dynamically allocated to avoid creating in advance all possible
-            // threads, with included pawns and material tables, if only few are used.
-            internal static void read_uci_options(ManualResetEvent[] initEvents)
-            {
-                maxThreadsPerSplitPoint = int.Parse(OptionMap.Instance["Max Threads per Split Point"].v);
-                minimumSplitDepth = int.Parse(OptionMap.Instance["Min Split Depth"].v) * DepthC.ONE_PLY;
-
-                var requested = int.Parse(OptionMap.Instance["Threads"].v);
-                var current = 0;
-
-                Debug.Assert(requested > 0);
-
-                while (size() < requested)
+                if (initEvents == null)
                 {
-                    if (initEvents == null)
-                    {
-                        threads.Add(new Thread(null));
-                    }
-                    else
-                    {
-                        threads.Add(new Thread(initEvents[current + 2]));
-                        current++;
-                    }
+                    threads.Add(new Thread(null));
                 }
-
-                while (size() > requested)
+                else
                 {
-                    var idx = size() - 1;
-                    threads[idx].exit();
-                    threads.RemoveAt(idx);
+                    threads.Add(new Thread(initEvents[current + 2]));
+                    current++;
                 }
+            }
+
+            while (size() > requested)
+            {
+                var idx = size() - 1;
+                threads[idx].exit();
+                threads.RemoveAt(idx);
+            }
         }
 
         // init() is called at startup to create and launch requested threads, that will
         // go immediately to sleep due to 'sleepWhileIdle' set to true. We cannot use
         // engine at this point due to allocation of Endgames in Thread c'tor.
         internal static void init()
+        {
+            var requested = int.Parse(OptionMap.Instance["Threads"].v);
+            var initEvents = new ManualResetEvent[requested + 1];
+            for (var i = 0; i < (requested + 1); i++)
             {
-                var requested = int.Parse(OptionMap.Instance["Threads"].v);
-                var initEvents = new ManualResetEvent[requested + 1];
-                for (var i = 0; i < (requested + 1); i++)
-                {
-                    initEvents[i] = new ManualResetEvent(false);
-                }
+                initEvents[i] = new ManualResetEvent(false);
+            }
 
 #if WINDOWS_RT
             Windows.Foundation.IAsyncAction action = Windows.System.Threading.ThreadPool.RunAsync(delegate { launch_threads(initEvents); }, WorkItemPriority.Normal);
 #else
-                ThreadPool.QueueUserWorkItem(launch_threads, initEvents);
+            ThreadPool.QueueUserWorkItem(launch_threads, initEvents);
 #endif
-                WaitHandle.WaitAll(initEvents);
-            }
+            WaitHandle.WaitAll(initEvents);
+        }
 
-            private static void launch_threads(object state)
-            {
-                var initEvents = (ManualResetEvent[])state;
-                timer = new TimerThread(initEvents[0]);
-                threads.Add(new MainThread(initEvents[1]));
-                sleepWhileIdle = true;
-                read_uci_options(initEvents);
-            }
+        private static void launch_threads(object state)
+        {
+            var initEvents = (ManualResetEvent[])state;
+            timer = new TimerThread(initEvents[0]);
+            threads.Add(new MainThread(initEvents[1]));
+            sleepWhileIdle = true;
+            read_uci_options(initEvents);
+        }
 
         // exit() cleanly terminates the threads before the program exits
         internal static void exit()
+        {
+            for (var i = 0; i < size(); i++)
             {
-                for (var i = 0; i < size(); i++)
-                {
-                    threads[i].exit();
-                }
-
-                timer.exit();
+                threads[i].exit();
             }
 
-            // slave_available() tries to find an idle thread which is available as
-            // a slave for the thread with threadID 'master'.
-            internal static bool slave_available(Thread master)
-            {
-                for (var i = 0; i < size(); i++)
-                {
-                    if (threads[i].is_available_to(master))
-                    {
-                        return true;
-                    }
-                }
-
-                return false;
+            timer.exit();
         }
 
-            // split() does the actual work of distributing the work at a node between
-            // several available threads. If it does not succeed in splitting the node
-            // (because no idle threads are available), the function immediately returns.
-            // If splitting is possible, a SplitPoint object is initialized with all the
-            // data that must be copied to the helper threads and then helper threads are
-            // told that they have been assigned work. This will cause them to instantly
-            // leave their idle loops and call search(). When all threads have returned from
-            // search() then split() returns.
-            internal static int split(
-                bool Fake,
-                Position pos,
-                Stack[] ss,
-                int ssPos,
-                int alpha,
-                int beta,
-                int bestValue,
-                ref int bestMove,
-                int depth,
-                int threatMove,
-                int moveCount,
-                MovePicker mp,
-                int nodeType)
+        // slave_available() tries to find an idle thread which is available as
+        // a slave for the thread with threadID 'master'.
+        internal static bool slave_available(Thread master)
+        {
+            for (var i = 0; i < size(); i++)
             {
+                if (threads[i].is_available_to(master))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        // split() does the actual work of distributing the work at a node between
+        // several available threads. If it does not succeed in splitting the node
+        // (because no idle threads are available), the function immediately returns.
+        // If splitting is possible, a SplitPoint object is initialized with all the
+        // data that must be copied to the helper threads and then helper threads are
+        // told that they have been assigned work. This will cause them to instantly
+        // leave their idle loops and call search(). When all threads have returned from
+        // search() then split() returns.
+        internal static void split(
+            bool Fake,
+            Position pos,
+            Stack[] ss,
+            int ssPos,
+            int alpha,
+            int beta,
+            ref int bestValue,
+            ref int bestMove,
+            int depth,
+            int threatMove,
+            int moveCount,
+            MovePicker movePicker,
+            int nodeType)
+        {
             Debug.Assert(bestValue <= alpha && alpha < beta && beta <= ValueC.VALUE_INFINITE);
             Debug.Assert(pos.pos_is_ok());
-                Debug.Assert(bestValue > -ValueC.VALUE_INFINITE);
-                Debug.Assert(depth > DepthC.DEPTH_ZERO);
+            Debug.Assert(bestValue > -ValueC.VALUE_INFINITE);
+            Debug.Assert(depth > DepthC.DEPTH_ZERO);
 
-                var thisThread = pos.this_thread();
+            var thisThread = pos.this_thread();
 
-            Debug.Assert(thisThread .searching);
-            Debug.Assert(thisThread .splitPointsSize < Constants.MAX_SPLITPOINTS_PER_THREAD);
+            Debug.Assert(thisThread.searching);
+            Debug.Assert(thisThread.splitPointsSize < Constants.MAX_SPLITPOINTS_PER_THREAD);
 
             // Pick the next available split point from the split point stack
-            var sp = thisThread .splitPoints[thisThread .splitPointsSize];
+            var sp = thisThread.splitPoints[thisThread.splitPointsSize];
 
-                sp.parentSplitPoint = thisThread .activeSplitPoint;
-                sp.master = thisThread ;
-                sp.cutoff = false;
-                sp.slavesMask = 1UL << thisThread .idx;
+            sp.parentSplitPoint = thisThread.activeSplitPoint;
+            sp.master = thisThread;
+            sp.cutoff = false;
+            sp.slavesMask = 1UL << thisThread.idx;
 #if ACTIVE_REPARENT
             sp.allSlavesRunning = true;
 #endif
 
-                sp.depth = depth;
-                sp.bestMove = bestMove;
-                sp.threatMove = threatMove;
-                sp.alpha = alpha;
-                sp.beta = beta;
-                sp.nodeType = nodeType;
-                sp.bestValue = bestValue;
-                sp.movePicker = mp;
-                sp.moveCount = moveCount;
-                sp.pos = pos;
-                sp.nodes = 0;
-                sp.ss = ss;
-                sp.ssPos = ssPos;
+            sp.depth = depth;
+            sp.bestMove = bestMove;
+            sp.threatMove = threatMove;
+            sp.alpha = alpha;
+            sp.beta = beta;
+            sp.nodeType = nodeType;
+            sp.bestValue = bestValue;
+            sp.movePicker = movePicker;
+            sp.moveCount = moveCount;
+            sp.pos = pos;
+            sp.nodes = 0;
+            sp.ss = ss;
+            sp.ssPos = ssPos;
 
             // Try to allocate available threads and ask them to start searching setting
             // 'searching' flag. This must be done under lock protection to avoid concurrent
             // allocation of the same slave by another master.
             ThreadHelper.lock_grab(splitLock);
-                ThreadHelper.lock_grab(sp.Lock);
+            ThreadHelper.lock_grab(sp.Lock);
 
-            thisThread .splitPointsSize++;
-            thisThread .activeSplitPoint = sp;
-            
+            thisThread.splitPointsSize++;
+            thisThread.activeSplitPoint = sp;
+
             var slavesCnt = 1; // Master is always included
 
             for (var i = 0; i < size() && !Fake; ++i)
-                {
-                    if (threads[i].is_available_to(thisThread ) && ++slavesCnt <= maxThreadsPerSplitPoint)
-                    {
-                        sp.slavesMask |= 1UL << threads[i].idx;
-                        threads[i].activeSplitPoint = sp;
-                        threads[i].searching = true; // Slave leaves idle_loop()
-
-                        threads[i].notify_one(); // Could be sleeping
-                    }
-                }
-
-                ThreadHelper.lock_release(sp.Lock);
-                ThreadHelper.lock_release(splitLock);
-
-                // Everything is set up. The master thread enters the idle loop, from which
-                // it will instantly launch a search, because its searching flag is set.
-                // We pass the split point as a parameter to the idle loop, which means that
-                // the thread will return from the idle loop when all slaves have finished
-                // their work at this split point.
-                if (slavesCnt > 1 || Fake)
-                {
-                    thisThread .base_idle_loop(null); // Force a call to base class idle_loop()
-
-                    // In helpful master concept a master can help only a sub-tree of its split
-                    // point, and because here is all finished is not possible master is booked.
-                    Debug.Assert(!thisThread .searching);
-                }
-
-                // We have returned from the idle loop, which means that all threads are
-                // finished. Note that setting searching and decreasing activeSplitPoints is
-                // done under lock protection to avoid a race with Thread::is_available_to().
-                ThreadHelper.lock_grab(splitLock);
-                ThreadHelper.lock_grab(sp.Lock); // To protect sp->nodes
-
-                thisThread .searching = true;
-                thisThread .splitPointsSize--;
-                thisThread .activeSplitPoint = sp.parentSplitPoint;
-                pos.nodes += sp.nodes;
-                bestMove = sp.bestMove;
-
-                ThreadHelper.lock_release(sp.Lock);
-                ThreadHelper.lock_release(splitLock);
-
-                return sp.bestValue;
-            }
-
-            // start_thinking() wakes up the main thread sleeping in MainThread::idle_loop()
-            // so to start a new search, then returns immediately.
-            internal static void start_thinking(Position pos, LimitsType limits, List<int> searchMoves)
             {
-                wait_for_think_finished();
-
-                Search.SearchTime.Reset();
-                Search.SearchTime.Start(); // As early as possible
-
-                Search.SignalsStopOnPonderhit = Search.SignalsFirstRootMove = false;
-                Search.SignalsStop = Search.SignalsFailedLowAtRoot = false;
-
-                Search.RootPos.copy(pos);
-                Search.Limits = limits;
-                Search.RootMoves.Clear();
-
-                var mlist = MListBroker.GetObject();
-                mlist.pos = 0;
-                Movegen.generate_legal(pos, mlist.moves, ref mlist.pos);
-                for (var i = 0; i < mlist.pos; i++)
+                if (threads[i].is_available_to(thisThread) && ++slavesCnt <= maxThreadsPerSplitPoint)
                 {
-                    var move = mlist.moves[i].move;
-                    if ((searchMoves.Count == 0) || Utils.existSearchMove(searchMoves, move))
-                    {
-                        Search.RootMoves.Add(new RootMove(move));
-                    }
-                }
-                MListBroker.Free();
+                    sp.slavesMask |= 1UL << threads[i].idx;
+                    threads[i].activeSplitPoint = sp;
+                    threads[i].searching = true; // Slave leaves idle_loop()
 
-                main_thread().thinking = true;
-                main_thread().notify_one();
+                    threads[i].notify_one(); // Could be sleeping
+                }
             }
 
-            // ThreadsManager::wait_for_think_finished() waits for main thread to go to
-            // sleep, this means search is finished. Then returns.
-            internal static void wait_for_think_finished()
+            ThreadHelper.lock_release(sp.Lock);
+            ThreadHelper.lock_release(splitLock);
+
+            // Everything is set up. The master thread enters the idle loop, from which
+            // it will instantly launch a search, because its searching flag is set.
+            // We pass the split point as a parameter to the idle loop, which means that
+            // the thread will return from the idle loop when all slaves have finished
+            // their work at this split point.
+            if (slavesCnt > 1 || Fake)
             {
-                var t = main_thread();
-                ThreadHelper.lock_grab(t.sleepLock);
-                ThreadHelper.cond_signal(t.sleepCond); // In case is waiting for stop or ponderhit
-                while (t.thinking)
-                {
-                    ThreadHelper.cond_wait(sleepCond, t.sleepLock);
-                }
-                ThreadHelper.lock_release(t.sleepLock);
-            }
-        };
+                thisThread.base_idle_loop(null); // Force a call to base class idle_loop()
 
-        internal static class ThreadHelper
+                // In helpful master concept a master can help only a sub-tree of its split
+                // point, and because here is all finished is not possible master is booked.
+                Debug.Assert(!thisThread.searching);
+            }
+
+            // We have returned from the idle loop, which means that all threads are
+            // finished. Note that setting searching and decreasing activeSplitPoints is
+            // done under lock protection to avoid a race with Thread::is_available_to().
+            ThreadHelper.lock_grab(splitLock);
+            ThreadHelper.lock_grab(sp.Lock); // To protect sp->nodes
+
+            thisThread.searching = true;
+            thisThread.splitPointsSize--;
+            thisThread.activeSplitPoint = sp.parentSplitPoint;
+            pos.nodes += sp.nodes;
+            bestMove = sp.bestMove;
+            bestValue = sp.bestValue;
+
+            ThreadHelper.lock_release(sp.Lock);
+            ThreadHelper.lock_release(splitLock);
+        }
+
+        // start_thinking() wakes up the main thread sleeping in MainThread::idle_loop()
+        // so to start a new search, then returns immediately.
+        internal static void start_thinking(Position pos, LimitsType limits, List<int> searchMoves)
         {
-            //#  define lock_grab(x) EnterCriticalSection(x)
-#if AGGR_INLINE
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-#endif
+            wait_for_think_finished();
 
-            internal static void lock_grab(object Lock)
+            Search.SearchTime.Reset();
+            Search.SearchTime.Start(); // As early as possible
+
+            Search.SignalsStopOnPonderhit = Search.SignalsFirstRootMove = false;
+            Search.SignalsStop = Search.SignalsFailedLowAtRoot = false;
+
+            Search.RootPos.copy(pos);
+            Search.Limits = limits;
+            Search.RootMoves.Clear();
+
+            var mlist = MListBroker.GetObject();
+            mlist.pos = 0;
+            Movegen.generate_legal(pos, mlist.moves, ref mlist.pos);
+            for (var i = 0; i < mlist.pos; i++)
             {
-                Monitor.Enter(Lock);
-            }
-
-            //#  define lock_release(x) LeaveCriticalSection(x)
-#if AGGR_INLINE
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-#endif
-
-            internal static void lock_release(object Lock)
-            {
-                Monitor.Exit(Lock);
-            }
-
-            //#  define cond_signal(x) SetEvent(*x)
-#if AGGR_INLINE
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-#endif
-
-            internal static void cond_signal(object sleepCond)
-            {
-                lock (sleepCond)
+                var move = mlist.moves[i].move;
+                if ((searchMoves.Count == 0) || Utils.existSearchMove(searchMoves, move))
                 {
-                    Monitor.Pulse(sleepCond);
+                    Search.RootMoves.Add(new RootMove(move));
                 }
             }
+            MListBroker.Free();
 
-            //#  define cond_wait(x,y) { lock_release(y); WaitForSingleObject(*x, INFINITE); lock_grab(y); }
-#if AGGR_INLINE
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-#endif
+            main_thread().thinking = true;
+            main_thread().notify_one();
+        }
 
-            internal static void cond_wait(object sleepCond, object sleepLock)
+        // ThreadsManager::wait_for_think_finished() waits for main thread to go to
+        // sleep, this means search is finished. Then returns.
+        internal static void wait_for_think_finished()
+        {
+            var t = main_thread();
+            ThreadHelper.lock_grab(t.sleepLock);
+            ThreadHelper.cond_signal(t.sleepCond); // In case is waiting for stop or ponderhit
+            while (t.thinking)
             {
-                lock_release(sleepLock);
-                lock (sleepCond)
-                {
-                    Monitor.Wait(sleepCond);
-                }
-                lock_grab(sleepLock);
+                ThreadHelper.cond_wait(sleepCond, t.sleepLock);
             }
+            ThreadHelper.lock_release(t.sleepLock);
+        }
+    };
 
-            //#  define cond_timedwait(x,y,z) { lock_release(y); WaitForSingleObject(*x,z); lock_grab(y); }
+    internal static class ThreadHelper
+    {
+        //#  define lock_grab(x) EnterCriticalSection(x)
 #if AGGR_INLINE
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #endif
+        internal static void lock_grab(object Lock)
+        {
+            Monitor.Enter(Lock);
+        }
 
-            internal static void cond_timedwait(object sleepCond, object sleepLock, int msec)
+        //#  define lock_release(x) LeaveCriticalSection(x)
+#if AGGR_INLINE
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#endif
+        internal static void lock_release(object Lock)
+        {
+            Monitor.Exit(Lock);
+        }
+
+        //#  define cond_signal(x) SetEvent(*x)
+#if AGGR_INLINE
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#endif
+        internal static void cond_signal(object sleepCond)
+        {
+            lock (sleepCond)
             {
-                lock_release(sleepLock);
-                lock (sleepCond)
-                {
-                    Monitor.Wait(sleepCond, msec);
-                }
-                lock_grab(sleepLock);
+                Monitor.Pulse(sleepCond);
             }
         }
+
+        //#  define cond_wait(x,y) { lock_release(y); WaitForSingleObject(*x, INFINITE); lock_grab(y); }
+#if AGGR_INLINE
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#endif
+        internal static void cond_wait(object sleepCond, object sleepLock)
+        {
+            lock_release(sleepLock);
+            lock (sleepCond)
+            {
+                Monitor.Wait(sleepCond);
+            }
+            lock_grab(sleepLock);
+        }
+
+        //#  define cond_timedwait(x,y,z) { lock_release(y); WaitForSingleObject(*x,z); lock_grab(y); }
+#if AGGR_INLINE
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+#endif
+        internal static void cond_timedwait(object sleepCond, object sleepLock, int msec)
+        {
+            lock_release(sleepLock);
+            lock (sleepCond)
+            {
+                Monitor.Wait(sleepCond, msec);
+            }
+            lock_grab(sleepLock);
+        }
     }
+}
