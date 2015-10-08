@@ -266,7 +266,7 @@ namespace Portfish
 
             this.phase = SequencerC.PROBCUT;
 
-            // In ProbCut we generate only captures better than parent's captured piece
+            // In ProbCut we generate only captures better than parentSplitPoint's captured piece
             this.captureThreshold = Position.PieceValue[PhaseC.MG][pt];
             this.ttMove = ((ttm != 0) && this.pos.is_pseudo_legal(ttm) ? ttm : MoveC.MOVE_NONE);
 

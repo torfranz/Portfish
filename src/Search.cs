@@ -912,7 +912,7 @@ namespace Portfish
                 return ttValue;
             }
 
-            // Step 5. Evaluate the position statically and update parent's gain statistics
+            // Step 5. Evaluate the position statically and update parentSplitPoint's gain statistics
             if (inCheck)
             {
                 ss[ssPos].staticEval = ss[ssPos].evalMargin = eval = ValueC.VALUE_NONE;
@@ -949,7 +949,7 @@ namespace Portfish
                     ss[ssPos].evalMargin);
             }
 
-            // Update gain for the parent non-capture move given the static position
+            // Update gain for the parentSplitPoint non-capture move given the static position
             // evaluation before and after the move.
             if ((move = ss[ssPos - 1].currentMove) != MoveC.MOVE_NULL && ss[ssPos - 1].staticEval != ValueC.VALUE_NONE
                 && ss[ssPos].staticEval != ValueC.VALUE_NONE && (pos.captured_piece_type() == 0) && Utils.type_of_move(move) == MoveTypeC.NORMAL)
@@ -1156,7 +1156,7 @@ namespace Portfish
                 H,
                 ss[ssPos],
                 PvNode ? -ValueC.VALUE_INFINITE : beta,
-                SpNode ? ss[ssPos].sp.mp : null);
+                SpNode ? ss[ssPos].sp.movePicker : null);
             var ci = CheckInfoBroker.GetObject();
             ci.CreateCheckInfo(pos);
             
@@ -1378,7 +1378,7 @@ namespace Portfish
 
                 // Only for PV nodes do a full PV search on the first move or after a fail
                 // high, in the latter case search only if value < beta, otherwise let the
-                // parent node to fail low with value <= alpha and to try another move.
+                // parentSplitPoint node to fail low with value <= alpha and to try another move.
                 if (PvNode && (pvMove || (value > alpha && (RootNode || value < beta))))
                 {
                     value = newDepth < DepthC.ONE_PLY
@@ -1507,7 +1507,7 @@ namespace Portfish
             // All legal moves have been searched and if there are no legal moves, it
             // must be mate or stalemate. Note that we can have a false positive in
             // case of Signals.stop or thread.cutoff_occurred() are set, but this is
-            // harmless because return value is discarded anyhow in the parent nodes.
+            // harmless because return value is discarded anyhow in the parentSplitPoint nodes.
             // If we are in a singular extension search then return a fail low score.
             // A split node has at least one move, the one tried before to be splitted.
             if (!SpNode && moveCount == 0)

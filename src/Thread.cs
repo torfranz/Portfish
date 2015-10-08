@@ -31,7 +31,7 @@ namespace Portfish
     internal sealed class SplitPoint
     {
         // Const data after splitPoint has been setup
-        internal SplitPoint parent;
+        internal SplitPoint parentSplitPoint;
 
         internal Position pos;
 
@@ -46,7 +46,7 @@ namespace Portfish
         internal int threatMove;
 
         // Const pointers to shared data
-        internal MovePicker mp;
+        internal MovePicker movePicker;
 
         internal Stack[] ss;
 
@@ -368,7 +368,7 @@ namespace Portfish
         // current active split point, or in some ancestor of the split point.
         internal bool cutoff_occurred()
         {
-            for (var sp = this.activeSplitPoint; sp != null; sp = sp.parent)
+            for (var sp = this.activeSplitPoint; sp != null; sp = sp.parentSplitPoint)
             {
                 if (sp.cutoff)
                 {
@@ -664,18 +664,18 @@ namespace Portfish
                 Debug.Assert(bestValue > -ValueC.VALUE_INFINITE);
                 Debug.Assert(depth > DepthC.DEPTH_ZERO);
 
-                var master = pos.this_thread();
+                var thisThread = pos.this_thread();
 
-            Debug.Assert(master.searching);
-            Debug.Assert(master.splitPointsSize < Constants.MAX_SPLITPOINTS_PER_THREAD);
+            Debug.Assert(thisThread .searching);
+            Debug.Assert(thisThread .splitPointsSize < Constants.MAX_SPLITPOINTS_PER_THREAD);
 
             // Pick the next available split point from the split point stack
-            var sp = master.splitPoints[master.splitPointsSize];
+            var sp = thisThread .splitPoints[thisThread .splitPointsSize];
 
-                sp.parent = master.activeSplitPoint;
-                sp.master = master;
+                sp.parentSplitPoint = thisThread .activeSplitPoint;
+                sp.master = thisThread ;
                 sp.cutoff = false;
-                sp.slavesMask = 1UL << master.idx;
+                sp.slavesMask = 1UL << thisThread .idx;
 #if ACTIVE_REPARENT
             sp.allSlavesRunning = true;
 #endif
@@ -687,7 +687,7 @@ namespace Portfish
                 sp.beta = beta;
                 sp.nodeType = nodeType;
                 sp.bestValue = bestValue;
-                sp.mp = mp;
+                sp.movePicker = mp;
                 sp.moveCount = moveCount;
                 sp.pos = pos;
                 sp.nodes = 0;
@@ -700,14 +700,14 @@ namespace Portfish
             ThreadHelper.lock_grab(splitLock);
                 ThreadHelper.lock_grab(sp.Lock);
 
-            master.splitPointsSize++;
-            master.activeSplitPoint = sp;
+            thisThread .splitPointsSize++;
+            thisThread .activeSplitPoint = sp;
             
             var slavesCnt = 1; // Master is always included
 
             for (var i = 0; i < size() && !Fake; ++i)
                 {
-                    if (threads[i].is_available_to(master) && ++slavesCnt <= maxThreadsPerSplitPoint)
+                    if (threads[i].is_available_to(thisThread ) && ++slavesCnt <= maxThreadsPerSplitPoint)
                     {
                         sp.slavesMask |= 1UL << threads[i].idx;
                         threads[i].activeSplitPoint = sp;
@@ -727,11 +727,11 @@ namespace Portfish
                 // their work at this split point.
                 if (slavesCnt > 1 || Fake)
                 {
-                    master.base_idle_loop(null); // Force a call to base class idle_loop()
+                    thisThread .base_idle_loop(null); // Force a call to base class idle_loop()
 
                     // In helpful master concept a master can help only a sub-tree of its split
                     // point, and because here is all finished is not possible master is booked.
-                    Debug.Assert(!master.searching);
+                    Debug.Assert(!thisThread .searching);
                 }
 
                 // We have returned from the idle loop, which means that all threads are
@@ -740,9 +740,9 @@ namespace Portfish
                 ThreadHelper.lock_grab(splitLock);
                 ThreadHelper.lock_grab(sp.Lock); // To protect sp->nodes
 
-                master.searching = true;
-                master.splitPointsSize--;
-                master.activeSplitPoint = sp.parent;
+                thisThread .searching = true;
+                thisThread .splitPointsSize--;
+                thisThread .activeSplitPoint = sp.parentSplitPoint;
                 pos.nodes += sp.nodes;
                 bestMove = sp.bestMove;
 
