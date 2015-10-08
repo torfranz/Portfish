@@ -920,8 +920,8 @@ namespace Portfish
             else if (tteHasValue)
             {
                 // Never assume anything on values stored in TT
-                if ((ss[ssPos].staticEval = eval = tte.static_value()) == ValueC.VALUE_NONE
-                    || (ss[ssPos].evalMargin = tte.static_value_margin()) == ValueC.VALUE_NONE)
+                if ((ss[ssPos].staticEval = eval = tte.eval_value()) == ValueC.VALUE_NONE
+                    || (ss[ssPos].evalMargin = tte.eval_margin()) == ValueC.VALUE_NONE)
                 {
                     eval = ss[ssPos].staticEval = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                 }
@@ -1661,8 +1661,8 @@ namespace Portfish
                 else if (tteHasValue)
                 {
                     // Never assume anything on values stored in TT
-                    if ((ss[ssPos].staticEval = bestValue = tte.static_value()) == ValueC.VALUE_NONE
-                        || (ss[ssPos].evalMargin = tte.static_value_margin()) == ValueC.VALUE_NONE)
+                    if ((ss[ssPos].staticEval = bestValue = tte.eval_value()) == ValueC.VALUE_NONE
+                        || (ss[ssPos].evalMargin = tte.eval_margin()) == ValueC.VALUE_NONE)
                     {
                         ss[ssPos].staticEval = bestValue = Evaluate.do_evaluate(false, pos, ref ss[ssPos].evalMargin);
                     }

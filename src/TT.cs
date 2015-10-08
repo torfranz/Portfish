@@ -46,7 +46,7 @@ namespace Portfish
 
         internal byte bound, generation8;
 
-        internal short value16, depth16, staticValue, staticMargin;
+        internal short value16, depth16, evalValue, evalMargin;
 
         internal void save(uint k, int v, Bound t, int d, int m, int g, Value statV, Value statM)
         {
@@ -56,49 +56,57 @@ namespace Portfish
             this.generation8 = (byte)g;
             this.value16 = (short)v;
             this.depth16 = (short)d;
-            this.staticValue = (short)statV;
-            this.staticMargin = (short)statM;
+            this.evalValue = (short)statV;
+            this.evalMargin = (short)statM;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal void set_generation(int g)
         {
             this.generation8 = (byte)g;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         //internal UInt32 key() { return key32; }
         internal int depth()
         {
             return this.depth16;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal int move()
         {
             return this.move16;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal int value()
         {
             return this.value16;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal Bound type()
         {
             return (Bound)this.bound;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal int generation()
         {
             return this.generation8;
         }
 
-        internal int static_value()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal int eval_value()
         {
-            return this.staticValue;
+            return this.evalValue;
         }
 
-        internal int static_value_margin()
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal int eval_margin()
         {
-            return this.staticMargin;
+            return this.evalMargin;
         }
     };
 
