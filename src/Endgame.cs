@@ -295,7 +295,7 @@ namespace Portfish
                 wpsq = Utils.mirror(wpsq);
             }
 
-            if (KPKPosition.probe_kpk_bitbase(wksq, wpsq, bksq, stm) == 0)
+            if (!KPKPosition.probe_kpk(wksq, wpsq, bksq, stm))
             {
                 return ValueC.VALUE_DRAW;
             }
@@ -1062,7 +1062,7 @@ namespace Portfish
 
             // Probe the KPK bitbase with the weakest side's pawn removed. If it's a draw,
             // it's probably at least a draw even with the pawn.
-            return (KPKPosition.probe_kpk_bitbase(wksq, wpsq, bksq, stm) != 0)
+            return (KPKPosition.probe_kpk(wksq, wpsq, bksq, stm))
                        ? ScaleFactorC.SCALE_FACTOR_NONE
                        : ScaleFactorC.SCALE_FACTOR_DRAW;
         }

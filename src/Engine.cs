@@ -26,7 +26,7 @@
             Utils.init();
             PolyglotBook.init();
             Zobrist.init();
-            KPKPosition.init();
+            KPKPosition.init_kpk();
             Endgame.init();
             Search.init();
             Evaluate.init();
