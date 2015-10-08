@@ -1346,7 +1346,8 @@ namespace Portfish
 
                 // Step 15. Reduced depth search (LMR). If the move fails high will be
                 // re-searched at full depth.
-                if (!pvMove 
+                if (depth > 3 * DepthC.ONE_PLY
+                    && !pvMove 
                     && !captureOrPromotion 
                     && !dangerous
                     && move != ttMove
