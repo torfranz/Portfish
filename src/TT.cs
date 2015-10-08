@@ -116,7 +116,7 @@ namespace Portfish
     {
         internal static readonly TTEntry StaticEntry = new TTEntry();
 
-        internal static uint size;
+        internal static uint clusterMask;
 
         internal static uint sizeMask;
 
@@ -141,15 +141,15 @@ namespace Portfish
                 newSize *= 2;
             }
 
-            if (newSize == size)
+            if (newSize == clusterMask)
             {
                 return;
             }
 
-            size = newSize;
-            sizeMask = size - 1;
+            clusterMask = newSize;
+            sizeMask = clusterMask - 1;
 
-            entries = new TTEntry[size * 4];
+            entries = new TTEntry[clusterMask * 4];
         }
 
         /// TranspositionTable::clear() overwrites the entire transposition table

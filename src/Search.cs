@@ -503,7 +503,7 @@ namespace Portfish
             }
 
             var ttSize = uint.Parse(OptionMap.Instance["Hash"].v);
-            if (TT.size != ttSize)
+            if (TT.clusterMask != ttSize)
             {
                 TT.set_size(ttSize);
             }
