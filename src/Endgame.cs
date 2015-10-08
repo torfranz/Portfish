@@ -551,6 +551,29 @@ namespace Portfish
                     }
                 }
             }
+
+            // All pawns on same B or G file? Then potential draw
+            if ((pawnFile == FileC.FILE_B || pawnFile == FileC.FILE_G)
+                  && (pos.pieces_PT(PieceTypeC.PAWN) & ~Utils.file_bb_F(pawnFile)) == 0
+                  && pos.non_pawn_material(weakerSide) == 0
+                  && pos.piece_count(weakerSide, PieceTypeC.PAWN) >= 1)
+            {
+                // Get weaker pawn closest to opponent's queening square
+                Bitboard wkPawns = pos.pieces_PTC(PieceTypeC.PAWN, weakerSide);
+                Square weakerPawnSq = strongerSide == ColorC.WHITE ? Utils.msb(wkPawns) : Utils.lsb(wkPawns);
+
+                Square strongerKingSq = pos.king_square(strongerSide);
+                Square weakerKingSq = pos.king_square(weakerSide);
+                Square bishopSq = pos.pieceList[strongerSide][PieceTypeC.BISHOP][0];
+
+                // Draw if weaker pawn is on rank 7, bishop can't attack the pawn, and
+                // weaker king can stop opposing opponent's king from penetrating.
+                if (Utils.relative_rank_CS(strongerSide, weakerPawnSq) == RankC.RANK_7
+                    && Utils.opposite_colors(bishopSq, weakerPawnSq)
+                    && Utils.square_distance(weakerPawnSq, weakerKingSq) <= Utils.square_distance(weakerPawnSq, strongerKingSq))
+                    return ScaleFactorC.SCALE_FACTOR_DRAW;
+            }
+
             return ScaleFactorC.SCALE_FACTOR_NONE;
         }
 
@@ -791,6 +814,7 @@ namespace Portfish
                     return ScaleFactorC.SCALE_FACTOR_DRAW;
                 }
             }
+
             return ScaleFactorC.SCALE_FACTOR_NONE;
         }
 
