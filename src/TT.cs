@@ -162,18 +162,18 @@ namespace Portfish
         /// it replaces the least valuable of entries. A TTEntry t1 is considered to be
         /// more valuable than a TTEntry t2 if t1 is from the current search and t2 is from
         /// a previous search, or if the depth of t1 is bigger than the depth of t2.
-        internal static void store(ulong posKey, int v, Bound t, int d, int m, Value statV, Value kingD)
+        internal static void store(ulong key, int v, Bound t, int d, int m, Value statV, Value kingD)
         {
-            var posKey32 = (uint)(posKey >> 32); // Use the high 32 bits as key inside the cluster
+            var key32 = (uint)(key >> 32); // Use the high 32 bits as key inside the cluster
             uint ttePos = 0;
             uint replacePos = 0;
-            ttePos = replacePos = (((uint)posKey) & sizeMask) << 2;
+            ttePos = replacePos = (((uint)key) & sizeMask) << 2;
 
             for (uint i = 0; i < Constants.ClusterSize; i++)
             {
                 var tte = entries[ttePos];
 
-                if ((tte.key == 0) || tte.key == posKey32) // Empty or overwrite old
+                if ((tte.key == 0) || tte.key == key32 ) // Empty or overwrite old
                 {
                     // Preserve any existing ttMove
                     if (m == MoveC.MOVE_NONE)
@@ -181,7 +181,7 @@ namespace Portfish
                         m = tte.move16;
                     }
 
-                    entries[ttePos].save(posKey32, v, t, d, m, generation, statV, kingD);
+                    entries[ttePos].save(key32 , v, t, d, m, generation, statV, kingD);
                     return;
                 }
 
@@ -222,7 +222,7 @@ namespace Portfish
 
                 ttePos++;
             }
-            entries[replacePos].save(posKey32, v, t, d, m, generation, statV, kingD);
+            entries[replacePos].save(key32 , v, t, d, m, generation, statV, kingD);
         }
 
         /// TranspositionTable::probe() looks up the current position in the
@@ -231,14 +231,14 @@ namespace Portfish
 #if AGGR_INLINE
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #endif
-        internal static bool probe(ulong posKey, ref uint ttePos, out TTEntry entry)
+        internal static bool probe(ulong key, ref uint ttePos, out TTEntry entry)
         {
-            var posKey32 = (uint)(posKey >> 32);
-            var offset = (((uint)posKey) & sizeMask) << 2;
+            var key32 = (uint)(key >> 32);
+            var offset = (((uint)key) & sizeMask) << 2;
 
             for (var i = offset; i < (Constants.ClusterSize + offset); i++)
             {
-                if (entries[i].key == posKey32)
+                if (entries[i].key == key32)
                 {
                     ttePos = i;
                     entry = entries[i];
