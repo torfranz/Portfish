@@ -619,19 +619,19 @@ namespace Portfish
             timer.exit();
         }
 
-        // slave_available() tries to find an idle thread which is available as
+        // available_slave() tries to find an idle thread which is available as
         // a slave for the thread with threadID 'master'.
-        internal static bool slave_available(Thread master)
+        internal static Thread available_slave(Thread master)
         {
             for (var i = 0; i < size(); i++)
             {
                 if (threads[i].is_available_to(master))
                 {
-                    return true;
+                    return threads[i];
                 }
             }
 
-            return false;
+            return null;
         }
 
         // split() does the actual work of distributing the work at a node between
@@ -702,17 +702,15 @@ namespace Portfish
             thisThread.activeSplitPoint = sp;
 
             var slavesCnt = 1; // Master is always included
-
-            for (var i = 0; i < size() && !Fake; ++i)
+            Thread slave;
+            while ((slave = Threads.available_slave(thisThread)) != null
+                && ++slavesCnt <= Threads.maxThreadsPerSplitPoint && !Fake)
             {
-                if (threads[i].is_available_to(thisThread) && ++slavesCnt <= maxThreadsPerSplitPoint)
-                {
-                    sp.slavesMask |= 1UL << threads[i].idx;
-                    threads[i].activeSplitPoint = sp;
-                    threads[i].searching = true; // Slave leaves idle_loop()
+                sp.slavesMask |= 1UL << slave.idx;
+                slave.activeSplitPoint = sp;
+                slave.searching = true; // Slave leaves idle_loop()
 
-                    threads[i].notify_one(); // Could be sleeping
-                }
+                slave.notify_one(); // Could be sleeping
             }
 
             ThreadHelper.lock_release(sp.Lock);
