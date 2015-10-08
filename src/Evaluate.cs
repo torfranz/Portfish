@@ -575,7 +575,7 @@ namespace Portfish
             // Init king safety tables only if we are going to use them
             if ((pos.pieceCount[Us][PieceTypeC.QUEEN] != 0)
                 && (Us == 0 ? pos.st.npMaterialWHITE : pos.st.npMaterialBLACK)
-                >= Constants.QueenValueMidgame + Constants.RookValueMidgame)
+                > Constants.QueenValueMidgame + Constants.RookValueMidgame)
             {
                 ei.kingRing[Them] = (b | (Us == ColorC.WHITE ? b >> 8 : b << 8));
                 b &= ei.attackedBy[Us][PieceTypeC.PAWN];
