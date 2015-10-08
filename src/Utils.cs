@@ -1205,8 +1205,7 @@ namespace Portfish
 
             Debug.Assert(pos.move_is_legal(m));
 
-            ulong attackers;
-            bool ambiguousMove, ambiguousFile, ambiguousRank;
+            Bitboard others, b;
             Color us = pos.sideToMove;
             var san = new StringBuilder();
 
@@ -1225,42 +1224,25 @@ namespace Portfish
                 {
                     san.Append(PieceToChar[ColorC.WHITE][pt]); // Upper case
 
-                    // Disambiguation if we have more then one piece with destination 'to'
-                    // note that for pawns is not needed because starting file is explicit.
-                    ambiguousMove = ambiguousFile = ambiguousRank = false;
-                    attackers = (pos.attacks_from_PS(pc, to) & pos.pieces_PTC(pt, us)) ^ (ulong)from;
-                    while (attackers != 0)
+                    // Disambiguation if we have more then one piece of type 'pt' that can
+                    // reach 'to' with a legal move.
+                    others = b = (pos.attacks_from_PS(pc, to) & pos.pieces_PTC(pt, us)) ^ (ulong)from;
+                    while (others != 0)
                     {
-                        var sq = pop_lsb(ref attackers);
-
-                        // Pinned pieces are not included in the possible sub-set
-                        if (!pos.pl_move_is_legal(make_move(sq, to), pos.pinned_pieces()))
+                        Move move = make_move(pop_lsb(ref b), to);
+                        if (!pos.pl_move_is_legal(move, pos.pinned_pieces()))
                         {
-                            continue;
+                            others ^= (ulong)from_sq(move);
                         }
-
-                        if (file_of(sq) == file_of(from))
-                        {
-                            ambiguousFile = true;
-                        }
-
-                        if (rank_of(sq) == rank_of(from))
-                        {
-                            ambiguousRank = true;
-                        }
-
-                        ambiguousFile |= file_of(sq) == file_of(from);
-                        ambiguousRank |= rank_of(sq) == rank_of(from);
-                        ambiguousMove = true;
                     }
 
-                    if (ambiguousMove)
+                    if (others != 0)
                     {
-                        if (!ambiguousFile)
+                        if ((others & file_bb_S(from)) == 0)
                         {
                             san.Append(file_to_char(file_of(from)));
                         }
-                        else if (!ambiguousRank)
+                        else if ((others & rank_bb_S(from)) == 0)
                         {
                             san.Append(rank_to_char(rank_of(from)));
                         }
