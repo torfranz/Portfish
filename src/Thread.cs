@@ -462,7 +462,7 @@ namespace Portfish
         {
             // Initialize the TT here
             var ttSize = uint.Parse(OptionMap.Instance["Hash"].v);
-            if (TT.clusterMask != ttSize)
+            if (TT.hashMask != ttSize)
             {
                 TT.set_size(ttSize);
             }

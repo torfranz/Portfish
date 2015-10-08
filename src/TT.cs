@@ -116,11 +116,11 @@ namespace Portfish
     {
         internal static readonly TTEntry StaticEntry = new TTEntry();
 
-        internal static uint clusterMask;
+        internal static uint hashMask;
 
         internal static uint sizeMask;
 
-        internal static TTEntry[] entries;
+        internal static TTEntry[] table;
 
         internal static byte generation; // Size must be not bigger then TTEntry::generation8
 
@@ -141,15 +141,15 @@ namespace Portfish
                 newSize *= 2;
             }
 
-            if (newSize == clusterMask)
+            if (newSize == hashMask)
             {
                 return;
             }
 
-            clusterMask = newSize;
-            sizeMask = clusterMask - 1;
+            hashMask = newSize;
+            sizeMask = hashMask - 1;
 
-            entries = new TTEntry[clusterMask * 4];
+            table = new TTEntry[hashMask * 4];
         }
 
         /// TranspositionTable::clear() overwrites the entire transposition table
@@ -157,9 +157,9 @@ namespace Portfish
         /// user asks the program to clear the table (from the UCI interface).
         internal static void clear()
         {
-            if (entries != null)
+            if (table != null)
             {
-                Array.Clear(entries, 0, entries.Length);
+                Array.Clear(table, 0, table.Length);
             }
         }
 
@@ -179,7 +179,7 @@ namespace Portfish
 
             for (uint i = 0; i < Constants.ClusterSize; i++)
             {
-                var tte = entries[ttePos];
+                var tte = table[ttePos];
 
                 if ((tte.key == 0) || tte.key == key32 ) // Empty or overwrite old
                 {
@@ -189,7 +189,7 @@ namespace Portfish
                         m = tte.move16;
                     }
 
-                    entries[ttePos].save(key32 , v, t, d, m, generation, statV, kingD);
+                    table[ttePos].save(key32 , v, t, d, m, generation, statV, kingD);
                     return;
                 }
 
@@ -199,13 +199,13 @@ namespace Portfish
                 //    replacePos = ttePos;
                 //}
 
-                if (entries[replacePos].generation8 == generation)
+                if (table[replacePos].generation8 == generation)
                 {
                     // +2
                     if (tte.generation8 == generation || tte.bound == 3 /*Bound.BOUND_EXACT*/)
                     {
                         // 0
-                        if (tte.depth16 < entries[replacePos].depth16)
+                        if (tte.depth16 < table[replacePos].depth16)
                         {
                             // +1
                             replacePos = ttePos;
@@ -221,7 +221,7 @@ namespace Portfish
                 {
                     // 0
                     if ((!(tte.generation8 == generation || tte.bound == 3 /*Bound.BOUND_EXACT*/))
-                        && (tte.depth16 < entries[replacePos].depth16))
+                        && (tte.depth16 < table[replacePos].depth16))
                     {
                         // +1
                         replacePos = ttePos;
@@ -230,7 +230,7 @@ namespace Portfish
 
                 ttePos++;
             }
-            entries[replacePos].save(key32 , v, t, d, m, generation, statV, kingD);
+            table[replacePos].save(key32 , v, t, d, m, generation, statV, kingD);
         }
 
         /// TranspositionTable::probe() looks up the current position in the
@@ -246,10 +246,10 @@ namespace Portfish
 
             for (var i = offset; i < (Constants.ClusterSize + offset); i++)
             {
-                if (entries[i].key == key32)
+                if (table[i].key == key32)
                 {
                     ttePos = i;
-                    entry = entries[i];
+                    entry = table[i];
                     return true;
                 }
             }

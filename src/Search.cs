@@ -503,7 +503,7 @@ namespace Portfish
             }
 
             var ttSize = uint.Parse(OptionMap.Instance["Hash"].v);
-            if (TT.clusterMask != ttSize)
+            if (TT.hashMask != ttSize)
             {
                 TT.set_size(ttSize);
             }
@@ -898,7 +898,7 @@ namespace Portfish
             {
                 Debug.Assert(ttValue != ValueC.VALUE_NONE); // Due to depth > DEPTH_NONE
 
-                TT.entries[ttePos].set_generation(TT.generation);
+                TT.table[ttePos].set_generation(TT.generation);
                 ss[ssPos].currentMove = ttMove; // Can be MOVE_NONE
 
                 if (ttValue >= beta && (ttMove != 0) && !pos.is_capture_or_promotion(ttMove)
@@ -1140,9 +1140,9 @@ namespace Portfish
             else
             {
                 // Re-read (needed as TTEntry is a struct in the port)
-                if ((tteHasValue) && (TT.entries[ttePos].key == tte.key))
+                if ((tteHasValue) && (TT.table[ttePos].key == tte.key))
                 {
-                    tte = TT.entries[ttePos];
+                    tte = TT.table[ttePos];
                 }
             }
 
