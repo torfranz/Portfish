@@ -2161,9 +2161,9 @@ namespace Portfish
                 ThreadHelper.lock_grab(Threads.splitLock);
 
                 nodes = RootPos.nodes;
-                
+
                 // Loop across all split points and sum accumulated SplitPoint nodes plus
-                // all the currently active slaves positions.
+                // all the currently active positions nodes.
                 for (var i = 0; i < Threads.size(); i++)
                 {
                     for (int j = 0; j < Threads.thread(i).splitPointsSize; j++)
@@ -2176,7 +2176,7 @@ namespace Portfish
                         Bitboard sm = sp.slavesMask;
                         while (sm != 0)
                         {
-                            Position pos = sp.slavesPositions[Utils.pop_lsb(ref sm)];
+                            Position pos = Threads.threads[Utils.pop_lsb(ref sm)].activePosition;
                             nodes += pos?.nodes ?? 0;
                         }
 

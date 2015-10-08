@@ -55,8 +55,6 @@ namespace Portfish
         // Shared data
         internal readonly object Lock = new object();
 
-        internal Position[] slavesPositions = new Position[Constants.MAX_THREADS];
-
         internal ulong slavesMask;
 
         internal long nodes;
@@ -120,6 +118,8 @@ namespace Portfish
 
         internal readonly PawnTable pawnTable = new PawnTable();
 
+        internal Position activePosition;
+
         internal readonly object sleepCond = new object();
 
         internal readonly object sleepLock = new object();
@@ -143,6 +143,7 @@ namespace Portfish
             this.searching = this.do_exit = false;
             this.maxPly = this.splitPointsSize = 0;
             this.activeSplitPoint = null;
+            this.activePosition = null;
             this.idx = Threads.size();
 
             for (var j = 0; j < Constants.MAX_SPLITPOINTS_PER_THREAD; j++)
@@ -235,9 +236,9 @@ namespace Portfish
 
                     ThreadHelper.lock_grab(sp.Lock);
 
-                    Debug.Assert(sp.slavesPositions[this.idx] == null);
+                    Debug.Assert(activePosition == null);
 
-                    sp.slavesPositions[this.idx] = pos;
+                    activePosition = pos;
 
                     switch (sp.nodeType)
                     {
@@ -273,7 +274,7 @@ namespace Portfish
                     Debug.Assert(this.searching);
 
                     this.searching = false;
-                    sp.slavesPositions[this.idx] = null;
+                    activePosition = null;
 #if ACTIVE_REPARENT
                     sp.allSlavesRunning = false;
 #endif
@@ -700,6 +701,7 @@ namespace Portfish
 
             thisThread.splitPointsSize++;
             thisThread.activeSplitPoint = sp;
+            thisThread.activePosition = null;
 
             var slavesCnt = 1; // Master is always included
             Thread slave;
@@ -728,6 +730,7 @@ namespace Portfish
                 // In helpful master concept a master can help only a sub-tree of its split
                 // point, and because here is all finished is not possible master is booked.
                 Debug.Assert(!thisThread.searching);
+                Debug.Assert(thisThread.activePosition == null);
             }
 
             // We have returned from the idle loop, which means that all threads are
@@ -739,6 +742,7 @@ namespace Portfish
             thisThread.searching = true;
             thisThread.splitPointsSize--;
             thisThread.activeSplitPoint = sp.parentSplitPoint;
+            thisThread.activePosition = pos;
             pos.nodes += sp.nodes;
             bestMove = sp.bestMove;
             bestValue = sp.bestValue;
